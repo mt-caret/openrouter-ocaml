@@ -29,9 +29,7 @@
   cohttp-async
   async_ssl
   core
-  jsonaf
-  (ocamlformat :with-dev-setup)
-  (ocaml-lsp-server :with-dev-setup))
+  jsonaf)
  (tags
   (openrouter llm ai api-client async)))
 
