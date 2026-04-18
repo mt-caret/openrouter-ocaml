@@ -20,8 +20,8 @@ depends: [
   "async_ssl"
   "core"
   "jsonaf"
-  "ocamlformat" {dev}
-  "ocaml-lsp-server" {dev}
+  "ocamlformat" {with-dev-setup}
+  "ocaml-lsp-server" {with-dev-setup}
   "odoc" {with-doc}
 ]
 build: [

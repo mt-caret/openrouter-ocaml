@@ -30,8 +30,8 @@
   async_ssl
   core
   jsonaf
-  (ocamlformat :dev)
-  (ocaml-lsp-server :dev))
+  (ocamlformat :with-dev-setup)
+  (ocaml-lsp-server :with-dev-setup))
  (tags
   (openrouter llm ai api-client async)))
 
