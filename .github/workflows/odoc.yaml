@@ -14,6 +14,11 @@ concurrency:
 jobs:
   deploy-odoc:
     runs-on: ubuntu-latest
+    env:
+      # We need this environment variable or else `dune build @odoc` won't find
+      # be able to find the odoc tool installed on the previous step. This is
+      # likely a bug in dune.
+      DUNE_CONFIG__LOCK_DEV_TOOL: enabled
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
