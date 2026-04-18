@@ -17,8 +17,9 @@
 
 (package
  (name openrouter_api)
- (synopsis "A short synopsis")
- (description "A longer description")
+ (synopsis "OCaml client for the OpenRouter API")
+ (description
+  "An Async-based OCaml client for OpenRouter (https://openrouter.ai), a unified API for LLMs from multiple providers (Anthropic, OpenAI, Google, and others). Covers chat completions (with streaming, tools, plugins, and structured outputs), text embeddings, and model listing.")
  (depends
   (ocaml
    (>= 5.4.1))
@@ -32,6 +33,6 @@
   (ocamlformat :dev)
   (ocaml-lsp-server :dev))
  (tags
-  ("add topics" "to describe" your project)))
+  (openrouter llm ai api-client async)))
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html
