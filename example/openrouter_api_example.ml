@@ -103,7 +103,11 @@ let chat_command =
          Option.map reasoning_tokens ~f:(fun max_tokens ->
            { Openrouter_api.Request.Reasoning.max_tokens })
        in
-       let plugins = if web_search then [ Openrouter_api.Plugin.web () ] else [] in
+       let plugins =
+         match web_search with
+         | true -> [ Openrouter_api.Plugin.web () ]
+         | false -> []
+       in
        (* Build message - use multipart if files are attached *)
        let%bind.Deferred.Or_error user_message =
          match files with
@@ -160,8 +164,8 @@ let chat_command =
          ; response_format
          }
        in
-       if stream
-       then (
+       match stream with
+       | true ->
          let%bind () =
            Openrouter_api.chat_stream ~api_key request
            >>= Pipe.iter ~f:(fun chunk_result ->
@@ -196,13 +200,13 @@ let chat_command =
                    Writer.flushed (force Writer.stdout))))
          in
          print_endline "";
-         Deferred.Or_error.return ())
-       else (
+         Deferred.Or_error.return ()
+       | false ->
          let%bind response = Openrouter_api.chat ~api_key request in
          [%sexp_of: Openrouter_api.Response.Elide_image.t Or_error.t] response
          |> Sexp.to_string_hum
          |> print_endline;
-         Deferred.Or_error.return ()))
+         Deferred.Or_error.return ())
 ;;
 
 let list_models_command =
@@ -258,10 +262,70 @@ let list_models_command =
          print_string (Ascii_table.to_string ~limit_width_to:180 columns models))
 ;;
 
+let embeddings_command =
+  Command.async_or_error
+    ~summary:"Get embeddings for one or more inputs (one per line on stdin if no -input)"
+    (let%map_open.Command model =
+       flag
+         "model"
+         (required string)
+         ~doc:"MODEL embedding model (e.g. openai/text-embedding-3-small)"
+     and inputs =
+       flag
+         "input"
+         (listed string)
+         ~doc:"STR text to embed (may be repeated; otherwise read from stdin)"
+     and dimensions =
+       flag "dimensions" (optional int) ~doc:"N truncate embeddings to N dimensions"
+     and sexp = flag "sexp" no_arg ~doc:" print raw sexp output"
+     and () = Log.Global.set_level_via_param () in
+     fun () ->
+       let%bind.Deferred.Or_error api_key = api_key_from_env () in
+       let%bind inputs =
+         match inputs with
+         | _ :: _ -> return inputs
+         | [] ->
+           let%map contents = Reader.contents (force Reader.stdin) in
+           String.split_lines contents
+           |> List.filter ~f:(fun line -> not (String.is_empty (String.strip line)))
+       in
+       let input =
+         match inputs with
+         | [ s ] -> Openrouter_api.Embeddings.Request.Input.Single s
+         | xs -> Multi xs
+       in
+       let%map.Deferred.Or_error
+           ({ object_ = _; model; data; usage; provider = _; id = _ } as response)
+         =
+         Openrouter_api.embeddings ~api_key { model; input; dimensions }
+       in
+       match sexp with
+       | true -> print_s [%sexp (response : Openrouter_api.Embeddings.Response.t)]
+       | false ->
+         print_s
+           [%message
+             ""
+               (model : string)
+               ~prompt_tokens:(usage.prompt_tokens : int)
+               ~total_tokens:(usage.total_tokens : int)
+               ~cost:(usage.cost : float option)];
+         List.iter data ~f:(fun { object_ = _; index; embedding } ->
+           let dims = List.length embedding in
+           let preview =
+             List.take embedding 3
+             |> List.map ~f:(fun x -> [%string "%{x#Float}"])
+             |> String.concat ~sep:", "
+           in
+           print_string [%string "[%{index#Int}] (%{dims#Int} dims) [%{preview}, ...]\n"]))
+;;
+
 let command =
   Command.group
     ~summary:"OpenRouter API example client"
-    [ "chat", chat_command; "list-models", list_models_command ]
+    [ "chat", chat_command
+    ; "list-models", list_models_command
+    ; "embeddings", embeddings_command
+    ]
 ;;
 
 let () = Command_unix.run command

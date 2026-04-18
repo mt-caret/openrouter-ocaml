@@ -25,6 +25,15 @@ OpenRouter API example client
   . [-temperature FLOAT]     . sampling temperature
   . [-top-p FLOAT]           . nucleus sampling cutoff
   . [-web-search]            . enable web search plugin
+  embeddings                 . Get embeddings for one or more inputs (one per
+                               line on stdin if no -input)
+  . -model MODEL             . embedding model (e.g.
+                               openai/text-embedding-3-small)
+  . [-dimensions N]          . truncate embeddings to N dimensions
+  . [-input STR] ...         . text to embed (may be repeated; otherwise read
+                               from stdin)
+  . [-log-level LEVEL]       . The log level (can be: Debug, Error, Info)
+  . [-sexp]                  . print raw sexp output
   list-models                . List all available models
   . [-log-level LEVEL]       . The log level (can be: Debug, Error, Info)
   . [-sexp]                  . print raw sexp output
