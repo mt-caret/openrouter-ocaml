@@ -1,17 +1,23 @@
 OpenRouter API CLI - Direct OpenRouter API access
 
-  openrouter_api_example.exe [MESSAGE]
+  openrouter_api_example.exe SUBCOMMAND
 
-=== flags ===
+=== subcommands and flags ===
 
-  [-file PATH] ...           . attach a file (PDF or image)
-  [-list-models]             . list all available models and exit
-  [-log-level LEVEL]         . The log level (can be: Debug, Error, Info)
-  [-model MODEL]             . model to use (default: anthropic/claude-opus-4.7)
-  [-no-stream]               . disable streaming (use non-streaming API)
-  [-reasoning TOKENS]        . enable reasoning with max tokens budget
-  [-web-search]              . enable web search plugin
-  [-build-info]              . print info about this build and exit
-  [-version]                 . print the version of this build and exit
-  [-help], -?                . print this help text and exit
+  chat                       . Send a chat completion request
+  . [-file PATH] ...         . attach a file (PDF or image)
+  . [-log-level LEVEL]       . The log level (can be: Debug, Error, Info)
+  . [-model MODEL]           . model to use (default: anthropic/claude-opus-4.7)
+  . [-no-stream]             . disable streaming (use non-streaming API)
+  . [-reasoning TOKENS]      . enable reasoning with max tokens budget
+  . [-web-search]            . enable web search plugin
+  list-models                . List all available models
+  . [-log-level LEVEL]       . The log level (can be: Debug, Error, Info)
+  version                    . print version information
+  . [-build-info]            . print build info for this build
+  . [-version]               . print the version of this build
+  help                       . explain a given subcommand (perhaps recursively)
+  . [-expand-dots]           . expand subcommands in recursive help
+  . [-flags]                 . show flags as well in recursive help
+  . [-recursive]             . show subcommands of subcommands, etc.
 
