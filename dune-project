@@ -27,7 +27,10 @@
   ppx_jane
   async
   cohttp-async
-  async_ssl
+  (async_ssl
+   ; This has to be v0.17.0-1 rather than v0.17.0 to work around some
+   ; compilation issues.
+   (= v0.17.0-1))
   core
   jsonaf)
  (tags

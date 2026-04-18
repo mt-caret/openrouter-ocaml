@@ -17,11 +17,9 @@ depends: [
   "ppx_jane"
   "async"
   "cohttp-async"
-  "async_ssl"
+  "async_ssl" {= "v0.17.0-1"}
   "core"
   "jsonaf"
-  "ocamlformat" {with-dev-setup}
-  "ocaml-lsp-server" {with-dev-setup}
   "odoc" {with-doc}
 ]
 build: [
