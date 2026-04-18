@@ -553,6 +553,7 @@ module Response = struct
     ; created : int
     ; choices : Choice.t list
     ; system_fingerprint : string option [@jsonaf.option]
+    ; service_tier : string option [@default None]
     ; usage : Usage.t
     }
   [@@deriving of_jsonaf, sexp_of]
@@ -566,6 +567,7 @@ module Response = struct
       ; created : int
       ; choices : (Choice.Elide_image.t list[@sexp.list])
       ; system_fingerprint : string option
+      ; service_tier : string option
       ; usage : Usage.t
       }
     [@@deriving sexp_of]
@@ -646,6 +648,7 @@ module Stream_chunk = struct
     ; created : int
     ; choices : Choice.t list
     ; system_fingerprint : string option [@jsonaf.option]
+    ; service_tier : string option [@default None]
     ; usage : Response.Usage.t option [@jsonaf.option]
     }
   [@@deriving of_jsonaf, sexp_of]

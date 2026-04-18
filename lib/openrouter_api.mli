@@ -345,6 +345,7 @@ module Response : sig
     ; created : int
     ; choices : Choice.t list
     ; system_fingerprint : string option
+    ; service_tier : string option
     ; usage : Usage.t
     }
   [@@deriving sexp_of]
@@ -410,6 +411,7 @@ module Stream_chunk : sig
     ; created : int
     ; choices : Choice.t list
     ; system_fingerprint : string option
+    ; service_tier : string option
     ; usage : Response.Usage.t option
     }
   [@@deriving sexp_of]
