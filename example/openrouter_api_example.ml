@@ -50,6 +50,13 @@ let chat_command =
          ~doc:"TOKENS enable reasoning with max tokens budget"
      and web_search = flag "web-search" no_arg ~doc:" enable web search plugin"
      and files = flag "file" (listed string) ~doc:"PATH attach a file (PDF or image)"
+     and temperature =
+       flag "temperature" (optional float) ~doc:"FLOAT sampling temperature"
+     and top_p = flag "top-p" (optional float) ~doc:"FLOAT nucleus sampling cutoff"
+     and max_tokens = flag "max-tokens" (optional int) ~doc:"N max tokens in completion"
+     and seed = flag "seed" (optional int) ~doc:"N RNG seed for reproducibility"
+     and stop =
+       flag "stop" (listed string) ~doc:"STR stop sequence (may be repeated, up to 4)"
      and message = anon (maybe ("MESSAGE" %: string))
      and () = Log.Global.set_level_via_param () in
      fun () ->
@@ -110,6 +117,11 @@ let chat_command =
          ; tool_choice = None
          ; parallel_tool_calls = None
          ; plugins
+         ; temperature
+         ; top_p
+         ; max_tokens
+         ; seed
+         ; stop = (if List.is_empty stop then None else Some stop)
          }
        in
        if stream

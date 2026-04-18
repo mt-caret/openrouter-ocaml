@@ -2,5 +2,6 @@
  (public_name openrouter_api)
  (name openrouter_api)
  (libraries async cohttp-async async_ssl core jsonaf)
+ (inline_tests)
  (preprocess
   (pps ppx_jane ppx_jsonaf_conv)))

@@ -270,6 +270,11 @@ module Request : sig
     ; tool_choice : Tool_choice.t option
     ; parallel_tool_calls : bool option
     ; plugins : Plugin.t list
+    ; temperature : float option
+    ; top_p : float option
+    ; max_tokens : int option
+    ; seed : int option
+    ; stop : string list option
     }
   [@@deriving jsonaf, sexp_of]
 end

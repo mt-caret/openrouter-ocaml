@@ -468,6 +468,11 @@ module Request = struct
     ; tool_choice : Tool_choice.t option [@jsonaf.option]
     ; parallel_tool_calls : bool option [@jsonaf.option]
     ; plugins : Plugin.t list [@default []] [@jsonaf_drop_default.equal]
+    ; temperature : float option [@jsonaf.option]
+    ; top_p : float option [@jsonaf.option]
+    ; max_tokens : int option [@jsonaf.option]
+    ; seed : int option [@jsonaf.option]
+    ; stop : string list option [@jsonaf.option]
     }
   [@@deriving jsonaf, sexp_of]
 end
@@ -664,6 +669,11 @@ let%expect_test "request" =
     ; tool_choice = None
     ; parallel_tool_calls = None
     ; plugins = []
+    ; temperature = None
+    ; top_p = None
+    ; max_tokens = None
+    ; seed = None
+    ; stop = None
     }
   |> Jsonaf.to_string_hum
   |> print_endline;
@@ -712,6 +722,11 @@ let%expect_test "request with tools" =
     ; tool_choice = Some Tool_choice.auto
     ; parallel_tool_calls = None
     ; plugins = []
+    ; temperature = None
+    ; top_p = None
+    ; max_tokens = None
+    ; seed = None
+    ; stop = None
     }
   |> Jsonaf.to_string_hum
   |> print_endline;
@@ -777,6 +792,11 @@ let%expect_test "tool result message" =
     ; tool_choice = None
     ; parallel_tool_calls = None
     ; plugins = []
+    ; temperature = None
+    ; top_p = None
+    ; max_tokens = None
+    ; seed = None
+    ; stop = None
     }
   |> Jsonaf.to_string_hum
   |> print_endline;
@@ -824,6 +844,11 @@ let%expect_test "request with web search plugin" =
     ; tool_choice = None
     ; parallel_tool_calls = None
     ; plugins = [ Plugin.web () ]
+    ; temperature = None
+    ; top_p = None
+    ; max_tokens = None
+    ; seed = None
+    ; stop = None
     }
   |> Jsonaf.to_string_hum
   |> print_endline;
@@ -866,6 +891,11 @@ let%expect_test "request with file attachment" =
     ; tool_choice = None
     ; parallel_tool_calls = None
     ; plugins = []
+    ; temperature = None
+    ; top_p = None
+    ; max_tokens = None
+    ; seed = None
+    ; stop = None
     }
   |> Jsonaf.to_string_hum
   |> print_endline;
@@ -914,6 +944,11 @@ let%expect_test "request with file-parser plugin" =
     ; tool_choice = None
     ; parallel_tool_calls = None
     ; plugins = [ Plugin.file_parser ~pdf_engine:Mistral_ocr () ]
+    ; temperature = None
+    ; top_p = None
+    ; max_tokens = None
+    ; seed = None
+    ; stop = None
     }
   |> Jsonaf.to_string_hum
   |> print_endline;

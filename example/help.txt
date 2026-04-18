@@ -7,9 +7,14 @@ OpenRouter API example client
   chat                       . Send a chat completion request
   . [-file PATH] ...         . attach a file (PDF or image)
   . [-log-level LEVEL]       . The log level (can be: Debug, Error, Info)
+  . [-max-tokens N]          . max tokens in completion
   . [-model MODEL]           . model to use (default: anthropic/claude-opus-4.7)
   . [-no-stream]             . disable streaming (use non-streaming API)
   . [-reasoning TOKENS]      . enable reasoning with max tokens budget
+  . [-seed N]                . RNG seed for reproducibility
+  . [-stop STR] ...          . stop sequence (may be repeated, up to 4)
+  . [-temperature FLOAT]     . sampling temperature
+  . [-top-p FLOAT]           . nucleus sampling cutoff
   . [-web-search]            . enable web search plugin
   list-models                . List all available models
   . [-log-level LEVEL]       . The log level (can be: Debug, Error, Info)
