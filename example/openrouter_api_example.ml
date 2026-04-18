@@ -1,5 +1,6 @@
 open! Core
 open! Async
+open! Openrouter_api
 
 (** Detect MIME type from file extension *)
 let mime_type_of_extension ext =
@@ -84,14 +85,13 @@ let chat_command =
          | true, Some _ ->
            Deferred.Or_error.error_string "cannot pass both -json and -json-schema"
          | true, None ->
-           Deferred.Or_error.return
-             (Some Openrouter_api.Request.Response_format.Json_object)
+           Deferred.Or_error.return (Some Completions.Request.Response_format.Json_object)
          | false, Some path ->
            let%map contents = Reader.file_contents path in
            let%map.Or_error schema = Jsonaf.parse contents in
            let name = Filename.basename path |> Filename.chop_extension in
            Some
-             (Openrouter_api.Request.Response_format.json_schema
+             (Completions.Request.Response_format.json_schema
                 ~name
                 ~strict:true
                 ~schema
@@ -101,17 +101,17 @@ let chat_command =
        let stream = not no_stream in
        let reasoning =
          Option.map reasoning_tokens ~f:(fun max_tokens ->
-           { Openrouter_api.Request.Reasoning.max_tokens })
+           { Completions.Request.Reasoning.max_tokens })
        in
        let plugins =
          match web_search with
-         | true -> [ Openrouter_api.Plugin.web () ]
+         | true -> [ Completions.Plugin.web () ]
          | false -> []
        in
        (* Build message - use multipart if files are attached *)
        let%bind.Deferred.Or_error user_message =
          match files with
-         | [] -> Deferred.Or_error.return (Openrouter_api.Request.Message.user message)
+         | [] -> Deferred.Or_error.return (Completions.Request.Message.user message)
          | _ ->
            (* Read all files and build content parts *)
            let%bind.Deferred.Or_error file_parts =
@@ -130,21 +130,20 @@ let chat_command =
                      ~prefix:(sprintf "data:%s;base64," mime_type)
                  in
                  Deferred.Or_error.return
-                   (Openrouter_api.Request.Message.Content_part.image_base64
+                   (Completions.Request.Message.Content_part.image_base64
                       ~mime_type
                       ~data))
                else
                  Deferred.Or_error.return
-                   (Openrouter_api.Request.Message.Content_part.file
+                   (Completions.Request.Message.Content_part.file
                       ~filename
                       ~file_data:data_url))
            in
-           let text_part = Openrouter_api.Request.Message.Content_part.text message in
+           let text_part = Completions.Request.Message.Content_part.text message in
            let all_parts = text_part :: file_parts in
-           Deferred.Or_error.return
-             (Openrouter_api.Request.Message.user_multipart all_parts)
+           Deferred.Or_error.return (Completions.Request.Message.user_multipart all_parts)
        in
-       let request : Openrouter_api.Request.t =
+       let request : Completions.Request.t =
          { model
          ; messages = [ user_message ]
          ; stream
@@ -167,13 +166,13 @@ let chat_command =
        match stream with
        | true ->
          let%bind () =
-           Openrouter_api.chat_stream ~api_key request
+           Completions.create_stream ~api_key request
            >>= Pipe.iter ~f:(fun chunk_result ->
              match chunk_result with
              | Error err ->
                eprintf "Stream error: %s\n" (Error.to_string_hum err);
                return ()
-             | Ok (chunk : Openrouter_api.Stream_chunk.t) ->
+             | Ok (chunk : Completions.Stream_chunk.t) ->
                Deferred.List.iter chunk.choices ~how:`Sequential ~f:(fun choice ->
                  (* Print text content *)
                  let%bind () =
@@ -192,7 +191,7 @@ let chat_command =
                  (* Print citations from web search *)
                  let citations =
                    List.filter_map choice.delta.annotations ~f:(fun ann ->
-                     Openrouter_api.Citation.of_annotation_jsonaf ann)
+                     Completions.Citation.of_annotation_jsonaf ann)
                  in
                  Deferred.List.iter citations ~how:`Sequential ~f:(fun citation ->
                    let title = Option.value citation.title ~default:citation.url in
@@ -202,8 +201,8 @@ let chat_command =
          print_endline "";
          Deferred.Or_error.return ()
        | false ->
-         let%bind response = Openrouter_api.chat ~api_key request in
-         [%sexp_of: Openrouter_api.Response.Elide_image.t Or_error.t] response
+         let%bind response = Completions.create ~api_key request in
+         [%sexp_of: Completions.Response.Elide_image.t Or_error.t] response
          |> Sexp.to_string_hum
          |> print_endline;
          Deferred.Or_error.return ())
@@ -217,13 +216,13 @@ let list_models_command =
      fun () ->
        let%bind.Deferred.Or_error api_key = api_key_from_env () in
        let%map.Deferred.Or_error { data = models } =
-         Openrouter_api.list_models ~api_key
+         Models.list ~api_key
          |> Deferred.Or_error.tag_s_lazy ~tag:(lazy [%message "Error fetching models"])
        in
        match sexp with
-       | true -> print_s [%sexp (models : Openrouter_api.Model_info.t list)]
+       | true -> print_s [%sexp (models : Models.Model_info.t list)]
        | false ->
-         let open Openrouter_api.Model_info in
+         let open Models.Model_info in
          (* Sort by model name, then by prompt price *)
          let models =
            List.sort
@@ -291,16 +290,16 @@ let embeddings_command =
        in
        let input =
          match inputs with
-         | [ s ] -> Openrouter_api.Embeddings.Request.Input.Single s
+         | [ s ] -> Embeddings.Request.Input.Single s
          | xs -> Multi xs
        in
        let%map.Deferred.Or_error
            ({ object_ = _; model; data; usage; provider = _; id = _ } as response)
          =
-         Openrouter_api.embeddings ~api_key { model; input; dimensions }
+         Embeddings.create ~api_key { model; input; dimensions }
        in
        match sexp with
-       | true -> print_s [%sexp (response : Openrouter_api.Embeddings.Response.t)]
+       | true -> print_s [%sexp (response : Embeddings.Response.t)]
        | false ->
          print_s
            [%message
