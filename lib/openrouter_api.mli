@@ -469,9 +469,16 @@ module Model_info : sig
     type t =
       { temperature : float option
       ; top_p : float option
+      ; top_k : float option
       ; frequency_penalty : float option
+      ; presence_penalty : float option
+      ; repetition_penalty : float option
       }
     [@@fields.no_zero_alloc] [@@deriving fields ~getters, sexp_of]
+  end
+
+  module Links : sig
+    type t = { details : string option } [@@deriving fields ~getters, sexp_of]
   end
 
   type t =
@@ -488,7 +495,9 @@ module Model_info : sig
     ; per_request_limits : Per_request_limits.t option
     ; supported_parameters : string list
     ; default_parameters : Default_parameters.t option
+    ; knowledge_cutoff : string option
     ; expiration_date : string option
+    ; links : Links.t option
     }
   [@@deriving fields ~getters, sexp_of]
 end

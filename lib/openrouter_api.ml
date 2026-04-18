@@ -30,7 +30,7 @@ module Reasoning_detail = struct
     ; text : string option [@default None] [@jsonaf_drop_default.equal]
     ; signature : string option [@default None] [@jsonaf_drop_default.equal]
     ; data : string option [@default None] [@jsonaf_drop_default.equal]
-    (* Google's encrypted reasoning *)
+      (* Google's encrypted reasoning *)
     }
   [@@deriving equal, jsonaf, sexp_of]
 end
@@ -263,17 +263,17 @@ module Message = struct
   type t =
     { role : string
     ; content : string option
-         [@default None] (* content can be null when assistant makes tool calls *)
+          [@default None] (* content can be null when assistant makes tool calls *)
     ; refusal : string option [@default None]
     ; reasoning : string option [@default None]
     ; reasoning_details : Reasoning_detail.t list
-         [@default []] [@jsonaf_drop_default.equal]
+          [@default []] [@jsonaf_drop_default.equal]
     ; images : Image.t list [@default []] [@jsonaf_drop_default.equal]
     ; annotations : Jsonaf.t list [@default []]
     ; tool_calls : Tool_call.t list
-         [@default []] [@jsonaf_drop_default.equal] (* Tool calls made by assistant *)
+          [@default []] [@jsonaf_drop_default.equal] (* Tool calls made by assistant *)
     ; tool_call_id : string option [@default None] [@jsonaf_drop_default.equal]
-    (* For tool role messages: ID of the tool call being responded to *)
+      (* For tool role messages: ID of the tool call being responded to *)
     }
   [@@deriving jsonaf, sexp_of]
 
@@ -397,15 +397,15 @@ module Request = struct
     type t =
       { role : string
       ; content : Content.t option
-           [@default None]
-           [@jsonaf_drop_default.equal]
-           (* Content can be null for assistant messages with tool_calls *)
+            [@default None]
+            [@jsonaf_drop_default.equal]
+            (* Content can be null for assistant messages with tool_calls *)
       ; tool_calls : Tool_call.t list
-           [@default []]
-           [@jsonaf_drop_default.equal]
-           (* Tool calls for assistant role (when replaying conversation) *)
+            [@default []]
+            [@jsonaf_drop_default.equal]
+            (* Tool calls for assistant role (when replaying conversation) *)
       ; tool_call_id : string option [@default None] [@jsonaf_drop_default.equal]
-      (* For tool role: ID of the tool call being responded to *)
+        (* For tool role: ID of the tool call being responded to *)
       }
     [@@deriving jsonaf, sexp_of]
 
@@ -590,7 +590,7 @@ module Stream_chunk = struct
       ; id : string option [@default None] [@jsonaf_drop_default.equal]
       ; type_ : string option [@default None] [@jsonaf_drop_default.equal] [@key "type"]
       ; function_ : Function_call.t option
-           [@default None] [@jsonaf_drop_default.equal] [@key "function"]
+            [@default None] [@jsonaf_drop_default.equal] [@key "function"]
       }
     [@@deriving of_jsonaf, sexp_of]
   end
@@ -602,12 +602,12 @@ module Stream_chunk = struct
       ; refusal : string option [@default None] [@jsonaf_drop_default.equal]
       ; reasoning : string option [@default None] [@jsonaf_drop_default.equal]
       ; reasoning_details : Reasoning_detail.t list
-           [@default []] [@jsonaf_drop_default.equal]
+            [@default []] [@jsonaf_drop_default.equal]
       ; images : Image.t list [@default []] [@jsonaf_drop_default.equal]
       ; annotations :
           (* Annotations from some providers (e.g., Google) - currently just stored as JSON *)
           Jsonaf.t list
-           [@default []] [@jsonaf_drop_default.equal]
+            [@default []] [@jsonaf_drop_default.equal]
       ; tool_calls : Tool_call_chunk.t list [@default []] [@jsonaf_drop_default.equal]
       }
     [@@deriving of_jsonaf, sexp_of]
@@ -690,16 +690,17 @@ let%expect_test "request with tools" =
       ~description:"Search for books in a library"
       ~parameters:
         (`Object
-          [ "type", `String "object"
-          ; ( "properties"
-            , `Object
-                [ ( "query"
-                  , `Object
-                      [ "type", `String "string"; "description", `String "Search query" ]
-                  )
-                ] )
-          ; "required", `Array [ `String "query" ]
-          ])
+            [ "type", `String "object"
+            ; ( "properties"
+              , `Object
+                  [ ( "query"
+                    , `Object
+                        [ "type", `String "string"
+                        ; "description", `String "Search query"
+                        ] )
+                  ] )
+            ; "required", `Array [ `String "query" ]
+            ])
       ()
   in
   [%jsonaf_of: Request.t]
@@ -1035,9 +1036,17 @@ module Model_info = struct
     type t =
       { temperature : float option [@default None]
       ; top_p : float option [@default None]
+      ; top_k : float option [@default None]
       ; frequency_penalty : float option [@default None]
+      ; presence_penalty : float option [@default None]
+      ; repetition_penalty : float option [@default None]
       }
     [@@fields.no_zero_alloc] [@@deriving fields ~getters, jsonaf, sexp_of]
+  end
+
+  module Links = struct
+    type t = { details : string option [@default None] }
+    [@@deriving fields ~getters, jsonaf, sexp_of]
   end
 
   type t =
@@ -1054,7 +1063,9 @@ module Model_info = struct
     ; per_request_limits : Per_request_limits.t option [@default None]
     ; supported_parameters : string list [@default []]
     ; default_parameters : Default_parameters.t option [@default None]
+    ; knowledge_cutoff : string option [@default None]
     ; expiration_date : string option [@default None]
+    ; links : Links.t option [@default None]
     }
   [@@deriving fields ~getters, jsonaf, sexp_of]
 end
