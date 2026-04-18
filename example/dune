@@ -7,3 +7,11 @@
   textutils.ascii_table)
  (preprocess
   (pps ppx_jane)))
+
+(rule
+ (target help.txt)
+ (mode promote)
+ (action
+  (with-stdout-to
+   %{target}
+   (run %{exe:openrouter_api_example.exe} -help))))

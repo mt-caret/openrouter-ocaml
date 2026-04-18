@@ -1,0 +1,17 @@
+OpenRouter API CLI - Direct OpenRouter API access
+
+  openrouter_api_example.exe [MESSAGE]
+
+=== flags ===
+
+  [-file PATH] ...           . attach a file (PDF or image)
+  [-list-models]             . list all available models and exit
+  [-log-level LEVEL]         . The log level (can be: Debug, Error, Info)
+  [-model MODEL]             . model to use (default: anthropic/claude-opus-4.7)
+  [-no-stream]               . disable streaming (use non-streaming API)
+  [-reasoning TOKENS]        . enable reasoning with max tokens budget
+  [-web-search]              . enable web search plugin
+  [-build-info]              . print info about this build and exit
+  [-version]                 . print the version of this build and exit
+  [-help], -?                . print this help text and exit
+
