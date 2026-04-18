@@ -1,4 +1,4 @@
-OpenRouter API CLI - Direct OpenRouter API access
+OpenRouter API example client
 
   openrouter_api_example.exe SUBCOMMAND
 
@@ -13,6 +13,7 @@ OpenRouter API CLI - Direct OpenRouter API access
   . [-web-search]            . enable web search plugin
   list-models                . List all available models
   . [-log-level LEVEL]       . The log level (can be: Debug, Error, Info)
+  . [-sexp]                  . print raw sexp output
   version                    . print version information
   . [-build-info]            . print build info for this build
   . [-version]               . print the version of this build

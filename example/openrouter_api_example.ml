@@ -160,7 +160,7 @@ let chat_command =
 let list_models_command =
   Command.async_or_error
     ~summary:"List all available models"
-    (let%map_open.Command () = return ()
+    (let%map_open.Command sexp = flag "sexp" no_arg ~doc:"print raw sexp output"
      and () = Log.Global.set_level_via_param () in
      fun () ->
        let%bind.Deferred.Or_error api_key = api_key_from_env () in
@@ -168,44 +168,51 @@ let list_models_command =
          Openrouter_api.list_models ~api_key
          |> Deferred.Or_error.tag_s_lazy ~tag:(lazy [%message "Error fetching models"])
        in
-       let open Openrouter_api.Model_info in
-       (* Sort by model name, then by prompt price *)
-       let models =
-         List.sort
-           models
-           ~compare:
-             (Comparable.lexicographic
-                [ Comparable.lift String.compare ~f:id
-                ; Comparable.lift Float.compare ~f:(Fn.compose Pricing.prompt pricing)
-                ])
-       in
-       let columns =
-         let open Ascii_table.Column in
-         [ create ~min_width:50 "Model ID" id
-         ; create ~min_width:9 "Context" (fun m ->
-             match context_length m with
-             | Some len -> sprintf "%dk" (len / 1000)
-             | None -> "-")
-         ; create ~min_width:12 "Max Output" (fun m ->
-             match Top_provider.max_completion_tokens (top_provider m) with
-             | Some tokens -> sprintf "%dk" (tokens / 1000)
-             | None -> "-")
-         ; create ~min_width:18 "Modality" (fun m ->
-             Option.value (Architecture.modality (architecture m)) ~default:"-")
-         ; create ~min_width:12 "Prompt $/M" (fun m ->
-             let price = Pricing.prompt (pricing m) in
-             if Float.( = ) price 0. then "free" else sprintf "%.2f" (price *. 1_000_000.))
-         ; create ~min_width:16 "Completion $/M" (fun m ->
-             let price = Pricing.completion (pricing m) in
-             if Float.( = ) price 0. then "free" else sprintf "%.2f" (price *. 1_000_000.))
-         ]
-       in
-       print_string (Ascii_table.to_string ~limit_width_to:180 columns models))
+       match sexp with
+       | true -> print_s [%sexp (models : Openrouter_api.Model_info.t list)]
+       | false ->
+         let open Openrouter_api.Model_info in
+         (* Sort by model name, then by prompt price *)
+         let models =
+           List.sort
+             models
+             ~compare:
+               (Comparable.lexicographic
+                  [ Comparable.lift String.compare ~f:id
+                  ; Comparable.lift Float.compare ~f:(Fn.compose Pricing.prompt pricing)
+                  ])
+         in
+         let columns =
+           let open Ascii_table.Column in
+           [ create ~min_width:50 "Model ID" id
+           ; create ~min_width:9 "Context" (fun m ->
+               match context_length m with
+               | Some len -> sprintf "%dk" (len / 1000)
+               | None -> "-")
+           ; create ~min_width:12 "Max Output" (fun m ->
+               match Top_provider.max_completion_tokens (top_provider m) with
+               | Some tokens -> sprintf "%dk" (tokens / 1000)
+               | None -> "-")
+           ; create ~min_width:18 "Modality" (fun m ->
+               Option.value (Architecture.modality (architecture m)) ~default:"-")
+           ; create ~min_width:12 "Prompt $/M" (fun m ->
+               let price = Pricing.prompt (pricing m) in
+               if Float.( = ) price 0.
+               then "free"
+               else sprintf "%.2f" (price *. 1_000_000.))
+           ; create ~min_width:16 "Completion $/M" (fun m ->
+               let price = Pricing.completion (pricing m) in
+               if Float.( = ) price 0.
+               then "free"
+               else sprintf "%.2f" (price *. 1_000_000.))
+           ]
+         in
+         print_string (Ascii_table.to_string ~limit_width_to:180 columns models))
 ;;
 
 let command =
   Command.group
-    ~summary:"OpenRouter API CLI - Direct OpenRouter API access"
+    ~summary:"OpenRouter API example client"
     [ "chat", chat_command; "list-models", list_models_command ]
 ;;
 
