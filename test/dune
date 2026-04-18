@@ -1,3 +1,0 @@
-(test
- (name test_openrouter_ocaml)
- (libraries openrouter_ocaml))

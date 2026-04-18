@@ -1,0 +1,9 @@
+(executable
+ (name openrouter_api_example)
+ (libraries
+  openrouter_api
+  async
+  core_unix.command_unix
+  textutils.ascii_table)
+ (preprocess
+  (pps ppx_jane)))

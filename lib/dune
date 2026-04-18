@@ -1,2 +1,6 @@
 (library
- (name openrouter_ocaml))
+ (public_name openrouter_api)
+ (name openrouter_api)
+ (libraries async cohttp-async async_ssl core jsonaf)
+ (preprocess
+  (pps ppx_jane ppx_jsonaf_conv)))

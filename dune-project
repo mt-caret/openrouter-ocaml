@@ -1,25 +1,36 @@
 (lang dune 3.22)
 
-(name openrouter-ocaml)
+(name openrouter_api)
 
 (generate_opam_files true)
 
 (source
- (github username/reponame))
+ (github mt-caret/openrouter-ocaml))
 
-(authors "Author Name <author@example.com>")
+(authors "Masayuki Takeda <mtakeda@oeconomia.jp>")
 
-(maintainers "Maintainer Name <maintainer@example.com>")
+(maintainers "Masayuki Takeda <mtakeda@oeconomia.jp>")
 
-(license LICENSE)
+(license MIT)
 
-(documentation https://url/to/documentation)
+(documentation https://github.com/mt-caret/openrouter-ocaml)
 
 (package
- (name openrouter-ocaml)
+ (name openrouter_api)
  (synopsis "A short synopsis")
  (description "A longer description")
- (depends (ocaml (>= 5.4.1)) (ocamlformat :dev) (ocaml-lsp-server :dev))
+ (depends
+  (ocaml
+   (>= 5.4.1))
+  ppx_jsonaf_conv
+  ppx_jane
+  async
+  cohttp-async
+  async_ssl
+  core
+  jsonaf
+  (ocamlformat :dev)
+  (ocaml-lsp-server :dev))
  (tags
   ("add topics" "to describe" your project)))
 
