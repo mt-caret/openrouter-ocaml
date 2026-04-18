@@ -459,6 +459,46 @@ module Request = struct
     type t = { max_tokens : int } [@@deriving jsonaf, sexp_of]
   end
 
+  (** Response format for structured outputs. See
+      https://openrouter.ai/docs/features/structured-outputs *)
+  module Response_format = struct
+    module Json_schema = struct
+      type t =
+        { name : string
+        ; strict : bool option [@jsonaf.option]
+        ; schema : Jsonaf.t option [@jsonaf.option]
+        ; description : string option [@jsonaf.option]
+        }
+      [@@deriving jsonaf, sexp_of]
+    end
+
+    type t =
+      | Json_object
+      | Json_schema of Json_schema.t
+    [@@deriving sexp_of]
+
+    let json_schema ?strict ?schema ?description ~name () =
+      Json_schema { Json_schema.name; strict; schema; description }
+    ;;
+
+    let jsonaf_of_t = function
+      | Json_object -> `Object [ "type", `String "json_object" ]
+      | Json_schema schema ->
+        `Object
+          [ "type", `String "json_schema"; "json_schema", Json_schema.jsonaf_of_t schema ]
+    ;;
+
+    let t_of_jsonaf json =
+      match Jsonaf.member "type" json with
+      | Some (`String "json_object") -> Json_object
+      | Some (`String "json_schema") ->
+        (match Jsonaf.member "json_schema" json with
+         | Some s -> Json_schema (Json_schema.t_of_jsonaf s)
+         | None -> Jsonaf_kernel.Conv.of_jsonaf_error "Missing 'json_schema' field" json)
+      | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Unknown response_format type" json
+    ;;
+  end
+
   type t =
     { model : string
     ; messages : Message.t list
@@ -473,6 +513,10 @@ module Request = struct
     ; max_tokens : int option [@jsonaf.option]
     ; seed : int option [@jsonaf.option]
     ; stop : string list option [@jsonaf.option]
+    ; frequency_penalty : float option [@jsonaf.option]
+    ; presence_penalty : float option [@jsonaf.option]
+    ; repetition_penalty : float option [@jsonaf.option]
+    ; response_format : Response_format.t option [@jsonaf.option]
     }
   [@@deriving jsonaf, sexp_of]
 end
@@ -674,6 +718,10 @@ let%expect_test "request" =
     ; max_tokens = None
     ; seed = None
     ; stop = None
+    ; frequency_penalty = None
+    ; presence_penalty = None
+    ; repetition_penalty = None
+    ; response_format = None
     }
   |> Jsonaf.to_string_hum
   |> print_endline;
@@ -727,6 +775,10 @@ let%expect_test "request with tools" =
     ; max_tokens = None
     ; seed = None
     ; stop = None
+    ; frequency_penalty = None
+    ; presence_penalty = None
+    ; repetition_penalty = None
+    ; response_format = None
     }
   |> Jsonaf.to_string_hum
   |> print_endline;
@@ -797,6 +849,10 @@ let%expect_test "tool result message" =
     ; max_tokens = None
     ; seed = None
     ; stop = None
+    ; frequency_penalty = None
+    ; presence_penalty = None
+    ; repetition_penalty = None
+    ; response_format = None
     }
   |> Jsonaf.to_string_hum
   |> print_endline;
@@ -849,6 +905,10 @@ let%expect_test "request with web search plugin" =
     ; max_tokens = None
     ; seed = None
     ; stop = None
+    ; frequency_penalty = None
+    ; presence_penalty = None
+    ; repetition_penalty = None
+    ; response_format = None
     }
   |> Jsonaf.to_string_hum
   |> print_endline;
@@ -896,6 +956,10 @@ let%expect_test "request with file attachment" =
     ; max_tokens = None
     ; seed = None
     ; stop = None
+    ; frequency_penalty = None
+    ; presence_penalty = None
+    ; repetition_penalty = None
+    ; response_format = None
     }
   |> Jsonaf.to_string_hum
   |> print_endline;
@@ -949,6 +1013,10 @@ let%expect_test "request with file-parser plugin" =
     ; max_tokens = None
     ; seed = None
     ; stop = None
+    ; frequency_penalty = None
+    ; presence_penalty = None
+    ; repetition_penalty = None
+    ; response_format = None
     }
   |> Jsonaf.to_string_hum
   |> print_endline;

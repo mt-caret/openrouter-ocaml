@@ -261,6 +261,33 @@ module Request : sig
     type t = { max_tokens : int } [@@deriving jsonaf, sexp_of]
   end
 
+  (** Response format for structured outputs. See
+      https://openrouter.ai/docs/features/structured-outputs *)
+  module Response_format : sig
+    module Json_schema : sig
+      type t =
+        { name : string
+        ; strict : bool option
+        ; schema : Jsonaf.t option
+        ; description : string option
+        }
+      [@@deriving jsonaf, sexp_of]
+    end
+
+    type t =
+      | Json_object
+      | Json_schema of Json_schema.t
+    [@@deriving jsonaf, sexp_of]
+
+    val json_schema
+      :  ?strict:bool
+      -> ?schema:Jsonaf.t
+      -> ?description:string
+      -> name:string
+      -> unit
+      -> t
+  end
+
   type t =
     { model : string
     ; messages : Message.t list
@@ -275,6 +302,10 @@ module Request : sig
     ; max_tokens : int option
     ; seed : int option
     ; stop : string list option
+    ; frequency_penalty : float option
+    ; presence_penalty : float option
+    ; repetition_penalty : float option
+    ; response_format : Response_format.t option
     }
   [@@deriving jsonaf, sexp_of]
 end

@@ -6,11 +6,20 @@ OpenRouter API example client
 
   chat                       . Send a chat completion request
   . [-file PATH] ...         . attach a file (PDF or image)
+  . [-frequency-penalty FLOAT]
+                             . frequency penalty
+  . [-json-schema FILE]      . force output matching the JSON schema in FILE
+  . [-json]                  . force JSON object output
+                               (response_format=json_object)
   . [-log-level LEVEL]       . The log level (can be: Debug, Error, Info)
   . [-max-tokens N]          . max tokens in completion
   . [-model MODEL]           . model to use (default: anthropic/claude-opus-4.7)
   . [-no-stream]             . disable streaming (use non-streaming API)
+  . [-presence-penalty FLOAT]
+                             . presence penalty
   . [-reasoning TOKENS]      . enable reasoning with max tokens budget
+  . [-repetition-penalty FLOAT]
+                             . repetition penalty
   . [-seed N]                . RNG seed for reproducibility
   . [-stop STR] ...          . stop sequence (may be repeated, up to 4)
   . [-temperature FLOAT]     . sampling temperature

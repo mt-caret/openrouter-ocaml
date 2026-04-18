@@ -57,6 +57,19 @@ let chat_command =
      and seed = flag "seed" (optional int) ~doc:"N RNG seed for reproducibility"
      and stop =
        flag "stop" (listed string) ~doc:"STR stop sequence (may be repeated, up to 4)"
+     and frequency_penalty =
+       flag "frequency-penalty" (optional float) ~doc:"FLOAT frequency penalty"
+     and presence_penalty =
+       flag "presence-penalty" (optional float) ~doc:"FLOAT presence penalty"
+     and repetition_penalty =
+       flag "repetition-penalty" (optional float) ~doc:"FLOAT repetition penalty"
+     and json =
+       flag "json" no_arg ~doc:" force JSON object output (response_format=json_object)"
+     and json_schema_file =
+       flag
+         "json-schema"
+         (optional Filename_unix.arg_type)
+         ~doc:"FILE force output matching the JSON schema in FILE"
      and message = anon (maybe ("MESSAGE" %: string))
      and () = Log.Global.set_level_via_param () in
      fun () ->
@@ -65,6 +78,25 @@ let chat_command =
          match message with
          | Some message -> return message
          | None -> Reader.contents (force Reader.stdin)
+       in
+       let%bind.Deferred.Or_error response_format =
+         match json, json_schema_file with
+         | true, Some _ ->
+           Deferred.Or_error.error_string "cannot pass both -json and -json-schema"
+         | true, None ->
+           Deferred.Or_error.return
+             (Some Openrouter_api.Request.Response_format.Json_object)
+         | false, Some path ->
+           let%map contents = Reader.file_contents path in
+           let%map.Or_error schema = Jsonaf.parse contents in
+           let name = Filename.basename path |> Filename.chop_extension in
+           Some
+             (Openrouter_api.Request.Response_format.json_schema
+                ~name
+                ~strict:true
+                ~schema
+                ())
+         | false, None -> Deferred.Or_error.return None
        in
        let stream = not no_stream in
        let reasoning =
@@ -122,6 +154,10 @@ let chat_command =
          ; max_tokens
          ; seed
          ; stop = (if List.is_empty stop then None else Some stop)
+         ; frequency_penalty
+         ; presence_penalty
+         ; repetition_penalty
+         ; response_format
          }
        in
        if stream
