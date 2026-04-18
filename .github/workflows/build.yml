@@ -8,31 +8,21 @@ permissions: read-all
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
-
     strategy:
       fail-fast: false
       matrix:
-        os:
+        runs-on:
           - ubuntu-latest
           - macos-latest
-        ocaml-compiler:
-          - "5.4"
+    runs-on: ${{ matrix.runs-on }}
 
     steps:
       - name: Checkout tree
         uses: actions/checkout@v6
 
-      - name: Set-up OCaml
-        uses: ocaml/setup-ocaml@v3
-        with:
-          ocaml-compiler: ${{ matrix.ocaml-compiler }}
-          dune-cache: true
+      - name: Set up dune
+        uses: ocaml-dune/setup-dune@v2
 
-      - run: opam exec -- dune build
+      - run: dune tool install ocamlformat
 
-      - run: opam exec -- dune tool install ocamlformat
-
-      - run: opam exec -- dune fmt
-
-      - run: opam exec -- dune runtest
+      - run: dune fmt

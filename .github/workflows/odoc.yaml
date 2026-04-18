@@ -26,15 +26,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set-up OCaml
-        uses: ocaml/setup-ocaml@v3
+      - name: Set up dune
+        uses: ocaml-dune/setup-dune@v2
         with:
-          ocaml-compiler: "5.4"
-          dune-cache: true
+          steps: install-dune enable-pkg lazy-update-depexts install-gpatch install-depexts build-deps
 
-      - run: opam exec -- dune tool install odoc
+      - run: dune tool install odoc
 
-      - run: opam exec -- dune build @doc
+      - run: dune build @doc
 
       - name: Set-up Pages
         uses: actions/configure-pages@v6
