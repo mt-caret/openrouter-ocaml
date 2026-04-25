@@ -17,7 +17,7 @@ depends: [
   "ppx_jane"
   "async"
   "cohttp-async"
-  "async_ssl" {= "v0.17.0-1"}
+  "async_ssl" {>= "v0.17.0-1"}
   "core"
   "jsonaf"
   "odoc" {with-doc}
