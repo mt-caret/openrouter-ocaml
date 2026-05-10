@@ -1,0 +1,41 @@
+{
+  "id": "gen-1778392451-h13oB9BVTj3ty6FES1xt",
+  "provider": "Amazon Bedrock",
+  "model": "anthropic/claude-4.6-sonnet-20260217",
+  "object": "chat.completion",
+  "created": 1778392451,
+  "system_fingerprint": null,
+  "choices": [
+    {
+      "logprobs": null,
+      "finish_reason": "tool_calls",
+      "native_finish_reason": "tool_use",
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": null,
+        "refusal": null,
+        "reasoning": null,
+        "reasoning_details": [],
+        "images": [],
+        "annotations": [],
+        "tool_calls": [
+          {
+            "id": "toolu_vrtx_01TRxp7ru5sZbR2D5MzZGpgv",
+            "type": "function",
+            "function": {
+              "name": "classify_post",
+              "arguments": "{\"ocaml_related\": true}"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 18961,
+    "completion_tokens": 37,
+    "total_tokens": 18998,
+    "cost": 0.057438
+  }
+}

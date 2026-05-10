@@ -76,6 +76,11 @@ end
 val get
   :  api_key:string
   -> ?app_info:Http.App_info.t
+  -> ?on_response_body:(string -> unit Deferred.t)
   -> id:string
   -> unit
   -> Stats.t option Or_error.t Deferred.t
+
+module For_testing : sig
+  val stats_of_jsonaf : Jsonaf.t -> Stats.t
+end

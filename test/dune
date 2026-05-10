@@ -1,0 +1,9 @@
+(library
+ (name openrouter_api_test)
+ (inline_tests
+  (deps
+   (glob_files responses/*.json)
+   (glob_files responses/*.ndjson)))
+ (libraries async core jsonaf openrouter_api)
+ (preprocess
+  (pps ppx_jane ppx_jsonaf_conv)))

@@ -1,3 +1,4 @@
+module Api_error = Api_error
 module Completions = Completions
 module Embeddings = Embeddings
 module Generation = Generation

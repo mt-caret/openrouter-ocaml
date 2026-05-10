@@ -26,7 +26,8 @@ module Reasoning_detail = struct
   [@@deriving equal, jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
 end
 
-(* Image in a message response *)
+(* Image in a message response. [index] is absent on Gemini's image-output
+   responses, so it stays optional. *)
 module Image = struct
   module Image_url = struct
     type t = { url : string }
@@ -36,7 +37,7 @@ module Image = struct
   type t =
     { type_ : string [@key "type"]
     ; image_url : Image_url.t
-    ; index : int
+    ; index : int option [@default None] [@jsonaf_drop_default.equal]
     }
   [@@deriving equal, jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
 
@@ -44,7 +45,7 @@ module Image = struct
     type nonrec t = t =
       { type_ : string
       ; image_url : (Image_url.t[@sexp.opaque])
-      ; index : int
+      ; index : int option
       }
     [@@deriving sexp_of]
   end
@@ -757,13 +758,18 @@ module Stream_chunk = struct
   [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
 end
 
-let create ~api_key ?app_info (request : Request.t) =
+let create ~api_key ?app_info ?on_response_body (request : Request.t) =
   let headers = Http.make_headers ~api_key ?app_info () in
   let body =
     [%jsonaf_of: Request.t] request |> Jsonaf.to_string |> Cohttp_async.Body.of_string
   in
   let%bind response, body = Cohttp_async.Client.post ~headers ~body endpoint_url in
-  let%map body_string = Cohttp_async.Body.to_string body in
+  let%bind body_string = Cohttp_async.Body.to_string body in
+  let%map () =
+    match on_response_body with
+    | None -> return ()
+    | Some f -> f body_string
+  in
   let%bind.Or_error () =
     match Http.is_success_status response with
     | true -> Ok ()
@@ -816,7 +822,7 @@ let lines_of_chunks (chunks : string Pipe.Reader.t) : string Pipe.Reader.t =
           | line -> Pipe.write writer line)))
 ;;
 
-let create_stream ~api_key ?app_info (request : Request.t) =
+let create_stream ~api_key ?app_info ?on_stream_chunk (request : Request.t) =
   let headers = Http.make_headers ~api_key ?app_info () in
   let body =
     [%jsonaf_of: Request.t] request |> Jsonaf.to_string |> Cohttp_async.Body.of_string
@@ -841,52 +847,65 @@ let create_stream ~api_key ?app_info (request : Request.t) =
     Pipe.of_list [ Error error ]
   | true ->
     return
-      (Cohttp_async.Body.to_pipe body
-       |> lines_of_chunks
-       |> Pipe.filter_map ~f:(fun line ->
-         let parse_result =
-           match
-             String.lsplit2 line ~on:':' |> Option.map ~f:(Tuple2.map_snd ~f:String.strip)
-           with
-           | Some ("", comment) ->
-             (* SSE lines starting with : are comments (e.g., ": OPENROUTER PROCESSING") *)
-             `Comment comment
-           | Some ("data", "[DONE]") -> `Done
-           | Some ("data", content) -> `Data content
-           | None | Some (_, _) -> `Unknown line
-         in
-         [%log.global.debug
-           "SSE line"
-             (parse_result
-              : [ `Comment of string | `Done | `Data of string | `Unknown of string ])];
-         let%map.Option data =
+      (Pipe.create_reader ~close_on_exception:true (fun writer ->
+         Cohttp_async.Body.to_pipe body
+         |> lines_of_chunks
+         |> Pipe.iter ~f:(fun line ->
+           let parse_result =
+             match
+               String.lsplit2 line ~on:':'
+               |> Option.map ~f:(Tuple2.map_snd ~f:String.strip)
+             with
+             | Some ("", comment) ->
+               (* SSE lines starting with : are comments (e.g., ": OPENROUTER PROCESSING") *)
+               `Comment comment
+             | Some ("data", "[DONE]") -> `Done
+             | Some ("data", content) -> `Data content
+             | None | Some (_, _) -> `Unknown line
+           in
+           [%log.global.debug
+             "SSE line"
+               (parse_result
+                : [ `Comment of string | `Done | `Data of string | `Unknown of string ])];
            match parse_result with
-           | `Comment _ | `Done | `Unknown _ -> None
-           | `Data data -> Some data
-         in
-         let%bind.Or_error json =
-           Jsonaf.parse data
-           |> Or_error.tag_s_lazy
-                ~tag:
-                  (lazy
-                    [%message
-                      "Failed to parse SSE data as JSON"
-                        (response : Cohttp.Response.t)
-                        (data : string)])
-         in
-         let%map.Or_error stream_chunk =
-           Or_error.try_with (fun () -> [%of_jsonaf: Stream_chunk.t] json)
-           |> Or_error.tag_s_lazy
-                ~tag:
-                  (lazy
-                    [%message
-                      "Failed to parse Stream_chunk"
-                        (response : Cohttp.Response.t)
-                        (json : Jsonaf.t)])
-         in
-         [%log.global.debug "Stream chunk" (stream_chunk : Stream_chunk.t)];
-         stream_chunk))
+           | `Comment _ | `Done | `Unknown _ -> Deferred.unit
+           | `Data data ->
+             let%bind () =
+               match on_stream_chunk with
+               | None -> Deferred.unit
+               | Some f -> f data
+             in
+             let result =
+               let%bind.Or_error json =
+                 Jsonaf.parse data
+                 |> Or_error.tag_s_lazy
+                      ~tag:
+                        (lazy
+                          [%message
+                            "Failed to parse SSE data as JSON"
+                              (response : Cohttp.Response.t)
+                              (data : string)])
+               in
+               let%map.Or_error stream_chunk =
+                 Or_error.try_with (fun () -> [%of_jsonaf: Stream_chunk.t] json)
+                 |> Or_error.tag_s_lazy
+                      ~tag:
+                        (lazy
+                          [%message
+                            "Failed to parse Stream_chunk"
+                              (response : Cohttp.Response.t)
+                              (json : Jsonaf.t)])
+               in
+               [%log.global.debug "Stream chunk" (stream_chunk : Stream_chunk.t)];
+               stream_chunk
+             in
+             Pipe.write writer result)))
 ;;
+
+module For_testing = struct
+  let response_of_jsonaf = [%of_jsonaf: Response.t]
+  let stream_chunk_of_jsonaf = [%of_jsonaf: Stream_chunk.t]
+end
 
 let%expect_test "request" =
   [%jsonaf_of: Request.t]

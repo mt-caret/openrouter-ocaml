@@ -93,5 +93,10 @@ end
 val list
   :  api_key:string
   -> ?app_info:Http.App_info.t
+  -> ?on_response_body:(string -> unit Deferred.t)
   -> unit
   -> Response.t Or_error.t Deferred.t
+
+module For_testing : sig
+  val response_of_jsonaf : Jsonaf.t -> Response.t
+end

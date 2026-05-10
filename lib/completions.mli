@@ -21,7 +21,7 @@ module Image : sig
   type t =
     { type_ : string
     ; image_url : Image_url.t
-    ; index : int
+    ; index : int option
     }
   [@@deriving sexp_of]
 
@@ -533,11 +533,23 @@ end
 val create
   :  api_key:string
   -> ?app_info:Http.App_info.t
+  -> ?on_response_body:(string -> unit Deferred.t)
+       (** Invoked with the raw HTTP response body before parsing — useful for
+           capturing fixtures or logging unexpected shapes. *)
   -> Request.t
   -> Response.t Or_error.t Deferred.t
 
 val create_stream
   :  api_key:string
   -> ?app_info:Http.App_info.t
+  -> ?on_stream_chunk:(string -> unit Deferred.t)
+       (** Invoked with each raw JSON payload (the [data: ...] portion of an SSE
+           line, with the [data: ] prefix stripped) before parsing. Useful for
+           capturing fixtures or logging unexpected shapes. *)
   -> Request.t
   -> Stream_chunk.t Or_error.t Pipe.Reader.t Deferred.t
+
+module For_testing : sig
+  val response_of_jsonaf : Jsonaf.t -> Response.t
+  val stream_chunk_of_jsonaf : Jsonaf.t -> Stream_chunk.t
+end

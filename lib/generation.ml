@@ -69,11 +69,16 @@ module Response = struct
   type t = { data : Stats.t } [@@deriving of_jsonaf, sexp_of]
 end
 
-let get ~api_key ?app_info ~id () =
+let get ~api_key ?app_info ?on_response_body ~id () =
   let headers = Http.make_headers ~api_key ?app_info () in
   let uri = Uri.add_query_param' endpoint_url ("id", id) in
   let%bind response, body = Cohttp_async.Client.get ~headers uri in
-  let%map body_string = Cohttp_async.Body.to_string body in
+  let%bind body_string = Cohttp_async.Body.to_string body in
+  let%map () =
+    match on_response_body with
+    | None -> return ()
+    | Some f -> f body_string
+  in
   let status = Cohttp.Response.status response in
   match Http.is_success_status response, status with
   | false, `Not_found -> Ok None
@@ -106,3 +111,7 @@ let get ~api_key ?app_info ~id () =
                  (response : Cohttp.Response.t)
                  (json : Jsonaf.t)])
 ;;
+
+module For_testing = struct
+  let stats_of_jsonaf json = ([%of_jsonaf: Response.t] json).data
+end

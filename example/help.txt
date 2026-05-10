@@ -21,6 +21,12 @@ OpenRouter API example client
   . [-json]                  . force JSON object output
                                (response_format=json_object)
   . [-log-level LEVEL]       . The log level (can be: Debug, Error, Info)
+  . [-log-response-to PATH]  . write the raw JSON response body to PATH
+                               (non-streaming only); useful for capturing test
+                               fixtures
+  . [-log-stream-to PATH]    . write each raw stream chunk JSON to PATH as one
+                               line (streaming only); useful for capturing test
+                               fixtures
   . [-logprobs]              . return token logprobs
   . [-max-completion-tokens N]
                              . max completion tokens (modern alias for
@@ -62,16 +68,20 @@ OpenRouter API example client
   . [-input STR] ...         . text to embed (may be repeated; otherwise read
                                from stdin)
   . [-log-level LEVEL]       . The log level (can be: Debug, Error, Info)
+  . [-log-response-to PATH]  . write the raw JSON response body to PATH
   . [-sexp]                  . print raw sexp output
   generation                 . Fetch generation stats for a previous request
   . -id GEN_ID               . generation id (returned on completion)
   . [-delay S]               . seconds between retry attempts
   . [-log-level LEVEL]       . The log level (can be: Debug, Error, Info)
+  . [-log-response-to PATH]  . write the raw JSON response body of the
+                               successful poll attempt to PATH
   . [-retries N]             . polling attempts while waiting for the generation
                                to materialize
   . [-sexp]                  . print raw sexp output
   list-models                . List all available models
   . [-log-level LEVEL]       . The log level (can be: Debug, Error, Info)
+  . [-log-response-to PATH]  . write the raw JSON response body to PATH
   . [-sexp]                  . print raw sexp output
   version                    . print version information
   . [-build-info]            . print build info for this build

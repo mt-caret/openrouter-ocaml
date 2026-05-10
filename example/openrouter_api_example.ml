@@ -138,6 +138,20 @@ let chat_command =
          "app-experimental-metadata"
          no_arg
          ~doc:" send X-OpenRouter-Experimental-Metadata: enabled"
+     and log_response_to =
+       flag
+         "log-response-to"
+         (optional Filename_unix.arg_type)
+         ~doc:
+           "PATH write the raw JSON response body to PATH (non-streaming only); useful \
+            for capturing test fixtures"
+     and log_stream_to =
+       flag
+         "log-stream-to"
+         (optional Filename_unix.arg_type)
+         ~doc:
+           "PATH write each raw stream chunk JSON to PATH as one line (streaming only); \
+            useful for capturing test fixtures"
      and message = anon (maybe ("MESSAGE" %: string))
      and () = Log.Global.set_level_via_param () in
      fun () ->
@@ -294,8 +308,20 @@ let chat_command =
        in
        match stream with
        | true ->
+         let%bind log_writer =
+           match log_stream_to with
+           | None -> return None
+           | Some path ->
+             let%map w = Writer.open_file path in
+             Some w
+         in
+         let on_stream_chunk =
+           Option.map log_writer ~f:(fun w chunk ->
+             Writer.write_line w chunk;
+             Writer.flushed w)
+         in
          let%bind () =
-           Completions.create_stream ~api_key ~app_info request
+           Completions.create_stream ~api_key ~app_info ?on_stream_chunk request
            >>= Pipe.iter ~f:(fun chunk_result ->
              match chunk_result with
              | Error err ->
@@ -327,10 +353,21 @@ let chat_command =
                    printf "\n📎 [%s](%s)\n" title citation.url;
                    Writer.flushed (force Writer.stdout))))
          in
+         let%bind () =
+           match log_writer with
+           | None -> return ()
+           | Some w -> Writer.close w
+         in
          print_endline "";
          Deferred.Or_error.return ()
        | false ->
-         let%bind response = Completions.create ~api_key ~app_info request in
+         let on_response_body =
+           Option.map log_response_to ~f:(fun path body ->
+             Writer.save path ~contents:body)
+         in
+         let%bind response =
+           Completions.create ~api_key ~app_info ?on_response_body request
+         in
          [%sexp_of: Completions.Response.Elide_image.t Or_error.t] response
          |> Sexp.to_string_hum
          |> print_endline;
@@ -341,11 +378,19 @@ let list_models_command =
   Command.async_or_error
     ~summary:"List all available models"
     (let%map_open.Command sexp = flag "sexp" no_arg ~doc:"print raw sexp output"
+     and log_response_to =
+       flag
+         "log-response-to"
+         (optional Filename_unix.arg_type)
+         ~doc:"PATH write the raw JSON response body to PATH"
      and () = Log.Global.set_level_via_param () in
      fun () ->
        let%bind.Deferred.Or_error api_key = api_key_from_env () in
+       let on_response_body =
+         Option.map log_response_to ~f:(fun path body -> Writer.save path ~contents:body)
+       in
        let%map.Deferred.Or_error { data = models } =
-         Models.list ~api_key ()
+         Models.list ~api_key ?on_response_body ()
          |> Deferred.Or_error.tag_s_lazy ~tag:(lazy [%message "Error fetching models"])
        in
        match sexp with
@@ -406,6 +451,11 @@ let embeddings_command =
      and dimensions =
        flag "dimensions" (optional int) ~doc:"N truncate embeddings to N dimensions"
      and sexp = flag "sexp" no_arg ~doc:" print raw sexp output"
+     and log_response_to =
+       flag
+         "log-response-to"
+         (optional Filename_unix.arg_type)
+         ~doc:"PATH write the raw JSON response body to PATH"
      and () = Log.Global.set_level_via_param () in
      fun () ->
        let%bind.Deferred.Or_error api_key = api_key_from_env () in
@@ -422,10 +472,13 @@ let embeddings_command =
          | [ s ] -> Embeddings.Request.Input.Single s
          | xs -> Multi xs
        in
+       let on_response_body =
+         Option.map log_response_to ~f:(fun path body -> Writer.save path ~contents:body)
+       in
        let%map.Deferred.Or_error
            ({ object_ = _; model; data; usage; provider = _; id = _ } as response)
          =
-         Embeddings.create ~api_key { model; input; dimensions }
+         Embeddings.create ~api_key ?on_response_body { model; input; dimensions }
        in
        match sexp with
        | true -> print_s [%sexp (response : Embeddings.Response.t)]
@@ -463,11 +516,26 @@ let generation_command =
          (optional_with_default 2.0 float)
          ~doc:"S seconds between retry attempts"
      and sexp = flag "sexp" no_arg ~doc:" print raw sexp output"
+     and log_response_to =
+       flag
+         "log-response-to"
+         (optional Filename_unix.arg_type)
+         ~doc:
+           "PATH write the raw JSON response body of the successful poll attempt to PATH"
      and () = Log.Global.set_level_via_param () in
      fun () ->
        let%bind.Deferred.Or_error api_key = api_key_from_env () in
+       let on_response_body =
+         Option.map log_response_to ~f:(fun path body ->
+           (* Only the successful poll attempt has a [data] field; skip the 404s. *)
+           match String.is_substring body ~substring:"\"data\"" with
+           | true -> Writer.save path ~contents:body
+           | false -> return ())
+       in
        let rec poll attempts_left =
-         match%bind.Deferred.Or_error Generation.get ~api_key ~id () with
+         match%bind.Deferred.Or_error
+           Generation.get ~api_key ?on_response_body ~id ()
+         with
          | Some stats -> Deferred.Or_error.return stats
          | None when attempts_left <= 0 ->
            Deferred.Or_error.errorf "generation %s not found after %d attempts" id retries
