@@ -22,7 +22,9 @@ module Model_info = struct
       ; input_cache_write : String_float.t option [@default None]
       ; discount : float option [@default None]
       }
-    [@@fields.no_zero_alloc] [@@deriving fields ~getters, jsonaf, sexp_of]
+    [@@fields.no_zero_alloc]
+    [@@deriving fields ~getters, jsonaf, sexp_of]
+    [@@jsonaf.allow_extra_fields]
   end
 
   module Architecture = struct
@@ -33,7 +35,7 @@ module Model_info = struct
       ; input_modalities : string list [@default []]
       ; output_modalities : string list [@default []]
       }
-    [@@deriving fields ~getters, jsonaf, sexp_of]
+    [@@deriving fields ~getters, jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
   end
 
   module Top_provider = struct
@@ -42,7 +44,7 @@ module Model_info = struct
       ; max_completion_tokens : int option [@default None]
       ; is_moderated : bool
       }
-    [@@deriving fields ~getters, jsonaf, sexp_of]
+    [@@deriving fields ~getters, jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
   end
 
   module Per_request_limits = struct
@@ -50,7 +52,9 @@ module Model_info = struct
       { prompt_tokens : float
       ; completion_tokens : float
       }
-    [@@fields.no_zero_alloc] [@@deriving fields ~getters, jsonaf, sexp_of]
+    [@@fields.no_zero_alloc]
+    [@@deriving fields ~getters, jsonaf, sexp_of]
+    [@@jsonaf.allow_extra_fields]
   end
 
   module Default_parameters = struct
@@ -62,12 +66,14 @@ module Model_info = struct
       ; presence_penalty : float option [@default None]
       ; repetition_penalty : float option [@default None]
       }
-    [@@fields.no_zero_alloc] [@@deriving fields ~getters, jsonaf, sexp_of]
+    [@@fields.no_zero_alloc]
+    [@@deriving fields ~getters, jsonaf, sexp_of]
+    [@@jsonaf.allow_extra_fields]
   end
 
   module Links = struct
     type t = { details : string option [@default None] }
-    [@@deriving fields ~getters, jsonaf, sexp_of]
+    [@@deriving fields ~getters, jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
   end
 
   type t =
@@ -88,15 +94,16 @@ module Model_info = struct
     ; expiration_date : string option [@default None]
     ; links : Links.t option [@default None]
     }
-  [@@deriving fields ~getters, jsonaf, sexp_of]
+  [@@deriving fields ~getters, jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
 end
 
 module Response = struct
-  type t = { data : Model_info.t list } [@@deriving jsonaf, sexp_of]
+  type t = { data : Model_info.t list }
+  [@@deriving jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
 end
 
-let list ~api_key =
-  let headers = Http.make_headers ~api_key in
+let list ~api_key ?app_info () =
+  let headers = Http.make_headers ~api_key ?app_info () in
   let%bind response, body = Cohttp_async.Client.get ~headers endpoint_url in
   let%map body_string = Cohttp_async.Body.to_string body in
   let%bind.Or_error () =

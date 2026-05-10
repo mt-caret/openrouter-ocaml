@@ -2,10 +2,21 @@
 
 open! Core
 
+module Code : sig
+  (** Error codes are usually integer HTTP status codes (400, 429, …) on the main
+      endpoints, but mid-stream chunks and the Responses API surface string codes
+      like ["server_error"] or ["rate_limit_exceeded"]. *)
+  type t =
+    | Int of int
+    | String of string
+  [@@deriving jsonaf, sexp_of]
+end
+
 module Details : sig
   type t =
     { message : string
-    ; code : int option
+    ; code : Code.t option
+    ; metadata : Jsonaf.t option
     }
   [@@deriving of_jsonaf, sexp_of]
 end

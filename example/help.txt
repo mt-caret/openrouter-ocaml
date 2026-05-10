@@ -5,6 +5,15 @@ OpenRouter API example client
 === subcommands and flags ===
 
   chat                       . Send a chat completion request
+  . [-app-cache]             . send X-OpenRouter-Cache: true to opt into
+                               response caching
+  . [-app-experimental-metadata]
+                             . send X-OpenRouter-Experimental-Metadata: enabled
+  . [-app-referer URL]       . value for HTTP-Referer header (app attribution)
+  . [-app-title NAME]        . value for X-Title header (app attribution)
+  . [-fallback-model MODEL] ...
+                             . fallback model id, in priority order (may be
+                               repeated)
   . [-file PATH] ...         . attach a file (PDF or image)
   . [-frequency-penalty FLOAT]
                              . frequency penalty
@@ -12,18 +21,38 @@ OpenRouter API example client
   . [-json]                  . force JSON object output
                                (response_format=json_object)
   . [-log-level LEVEL]       . The log level (can be: Debug, Error, Info)
+  . [-logprobs]              . return token logprobs
+  . [-max-completion-tokens N]
+                             . max completion tokens (modern alias for
+                               -max-tokens)
   . [-max-tokens N]          . max tokens in completion
+  . [-min-p FLOAT]           . min-p sampling cutoff
+  . [-modality NAME] ...     . enable response modality (e.g. text, image; may
+                               be repeated)
   . [-model MODEL]           . model to use (default: anthropic/claude-opus-4.7)
   . [-no-stream]             . disable streaming (use non-streaming API)
   . [-presence-penalty FLOAT]
                              . presence penalty
   . [-reasoning TOKENS]      . enable reasoning with max tokens budget
+  . [-reasoning-effort EFFORT]
+                             . reasoning effort
+                               (xhigh|high|medium|low|minimal|none); mutually
+                               exclusive with -reasoning
+  . [-reasoning-exclude]     . hide reasoning from response output
   . [-repetition-penalty FLOAT]
                              . repetition penalty
   . [-seed N]                . RNG seed for reproducibility
+  . [-service-tier TIER]     . service tier (e.g. auto, default, flex, priority)
   . [-stop STR] ...          . stop sequence (may be repeated, up to 4)
+  . [-stream-usage]          . include final usage chunk in streaming responses
   . [-temperature FLOAT]     . sampling temperature
+  . [-top-a FLOAT]           . top-a sampling cutoff
+  . [-top-k N]               . top-k sampling cutoff
+  . [-top-logprobs N]        . return top-N logprobs per token
   . [-top-p FLOAT]           . nucleus sampling cutoff
+  . [-transform NAME] ...    . message transform (e.g. middle-out; may be
+                               repeated)
+  . [-verbosity LEVEL]       . completion verbosity (low|medium|high|xhigh|max)
   . [-web-search]            . enable web search plugin
   embeddings                 . Get embeddings for one or more inputs (one per
                                line on stdin if no -input)
@@ -33,6 +62,13 @@ OpenRouter API example client
   . [-input STR] ...         . text to embed (may be repeated; otherwise read
                                from stdin)
   . [-log-level LEVEL]       . The log level (can be: Debug, Error, Info)
+  . [-sexp]                  . print raw sexp output
+  generation                 . Fetch generation stats for a previous request
+  . -id GEN_ID               . generation id (returned on completion)
+  . [-delay S]               . seconds between retry attempts
+  . [-log-level LEVEL]       . The log level (can be: Debug, Error, Info)
+  . [-retries N]             . polling attempts while waiting for the generation
+                               to materialize
   . [-sexp]                  . print raw sexp output
   list-models                . List all available models
   . [-log-level LEVEL]       . The log level (can be: Debug, Error, Info)

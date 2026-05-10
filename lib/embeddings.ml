@@ -43,7 +43,7 @@ module Response = struct
       ; index : int
       ; embedding : float list
       }
-    [@@deriving of_jsonaf, sexp_of]
+    [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
   end
 
   module Usage = struct
@@ -52,7 +52,7 @@ module Response = struct
       ; total_tokens : int
       ; cost : float option [@default None]
       }
-    [@@deriving of_jsonaf, sexp_of]
+    [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
   end
 
   type t =
@@ -63,11 +63,11 @@ module Response = struct
     ; provider : string option [@default None]
     ; id : string option [@default None]
     }
-  [@@deriving of_jsonaf, sexp_of]
+  [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
 end
 
-let create ~api_key (request : Request.t) =
-  let headers = Http.make_headers ~api_key in
+let create ~api_key ?app_info (request : Request.t) =
+  let headers = Http.make_headers ~api_key ?app_info () in
   let body =
     [%jsonaf_of: Request.t] request |> Jsonaf.to_string |> Cohttp_async.Body.of_string
   in

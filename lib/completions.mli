@@ -3,9 +3,9 @@ open! Async
 
 module Reasoning_detail : sig
   type t =
-    { format : string
-    ; index : int
-    ; type_ : string
+    { format : string option
+    ; index : int option
+    ; type_ : string option
     ; text : string option
     ; signature : string option
     ; data : string option
@@ -248,7 +248,54 @@ module Request : sig
   end
 
   module Reasoning : sig
-    type t = { max_tokens : int } [@@deriving jsonaf, sexp_of]
+    module Effort : sig
+      type t =
+        | Xhigh
+        | High
+        | Medium
+        | Low
+        | Minimal
+        | None_
+      [@@deriving jsonaf, sexp_of]
+
+      (** [of_string] raises [Jsonaf_kernel.Conv.Of_jsonaf_error] on unknown values. *)
+      include Stringable.S with type t := t
+    end
+
+    (** Effort and max_tokens are mutually exclusive: providers accept one but not
+        both. Pass [enabled = Some true] alone to enable reasoning with provider
+        defaults. Pass [exclude = Some true] to keep reasoning hidden from the
+        response while the model still uses it internally. *)
+    type t =
+      { effort : Effort.t option
+      ; max_tokens : int option
+      ; exclude : bool option
+      ; enabled : bool option
+      }
+    [@@deriving jsonaf, sexp_of]
+  end
+
+  module Verbosity : sig
+    type t =
+      | Low
+      | Medium
+      | High
+      | Xhigh
+      | Max
+    [@@deriving jsonaf, sexp_of]
+
+    (** [of_string] raises [Jsonaf_kernel.Conv.Of_jsonaf_error] on unknown values. *)
+    include Stringable.S with type t := t
+  end
+
+  module Stream_options : sig
+    type t = { include_usage : bool option } [@@deriving jsonaf, sexp_of]
+  end
+
+  module Logit_bias : sig
+    (** Map from token id (as a string, per the OpenAI/OpenRouter wire format) to
+        bias in [-100, 100]. *)
+    type t = (string * int) list [@@deriving jsonaf, sexp_of]
   end
 
   (** Response format for structured outputs. See
@@ -289,15 +336,55 @@ module Request : sig
     ; plugins : Plugin.t list
     ; temperature : float option
     ; top_p : float option
+    ; top_k : int option
+    ; min_p : float option
+    ; top_a : float option
     ; max_tokens : int option
+    ; max_completion_tokens : int option
     ; seed : int option
     ; stop : string list option
     ; frequency_penalty : float option
     ; presence_penalty : float option
     ; repetition_penalty : float option
+    ; logit_bias : Logit_bias.t option
+    ; logprobs : bool option
+    ; top_logprobs : int option
+    ; verbosity : Verbosity.t option
     ; response_format : Response_format.t option
+    ; modalities : string list option
+    ; stream_options : Stream_options.t option
+    ; service_tier : string option
+    ; models : string list
+    ; transforms : string list
     }
   [@@deriving jsonaf, sexp_of]
+end
+
+module Logprobs : sig
+  module Top_logprob : sig
+    type t =
+      { token : string
+      ; logprob : float
+      ; bytes : int list option
+      }
+    [@@deriving sexp_of]
+  end
+
+  module Token : sig
+    type t =
+      { token : string
+      ; logprob : float
+      ; bytes : int list option
+      ; top_logprobs : Top_logprob.t list
+      }
+    [@@deriving sexp_of]
+  end
+
+  type t =
+    { content : Token.t list option
+    ; refusal : Token.t list option
+    }
+  [@@deriving sexp_of]
 end
 
 module Response : sig
@@ -350,7 +437,7 @@ module Response : sig
 
   module Choice : sig
     type t =
-      { logprobs : unit option
+      { logprobs : Logprobs.t option
       ; finish_reason : string
       ; native_finish_reason : string
       ; index : int
@@ -420,7 +507,7 @@ module Stream_chunk : sig
 
   module Choice : sig
     type t =
-      { logprobs : unit option
+      { logprobs : Logprobs.t option
       ; finish_reason : string option
       ; native_finish_reason : string option
       ; index : int
@@ -443,9 +530,14 @@ module Stream_chunk : sig
   [@@deriving sexp_of]
 end
 
-val create : api_key:string -> Request.t -> Response.t Or_error.t Deferred.t
+val create
+  :  api_key:string
+  -> ?app_info:Http.App_info.t
+  -> Request.t
+  -> Response.t Or_error.t Deferred.t
 
 val create_stream
   :  api_key:string
+  -> ?app_info:Http.App_info.t
   -> Request.t
   -> Stream_chunk.t Or_error.t Pipe.Reader.t Deferred.t

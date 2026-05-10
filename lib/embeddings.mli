@@ -48,4 +48,8 @@ module Response : sig
   [@@deriving sexp_of]
 end
 
-val create : api_key:string -> Request.t -> Response.t Or_error.t Deferred.t
+val create
+  :  api_key:string
+  -> ?app_info:Http.App_info.t
+  -> Request.t
+  -> Response.t Or_error.t Deferred.t

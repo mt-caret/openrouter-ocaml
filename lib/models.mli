@@ -90,4 +90,8 @@ module Response : sig
   type t = { data : Model_info.t list } [@@deriving sexp_of]
 end
 
-val list : api_key:string -> Response.t Or_error.t Deferred.t
+val list
+  :  api_key:string
+  -> ?app_info:Http.App_info.t
+  -> unit
+  -> Response.t Or_error.t Deferred.t
