@@ -1070,7 +1070,8 @@ let%expect_test "stream_anthropic_haiku" =
        (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
          (delta
           ((role (assistant)) (content (p)) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
+           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
       (system_fingerprint ()) (service_tier ()) (usage ()))
      ((id gen-1778404760-HzbZLh5i6tNjGlnRLzsQ) (provider "Amazon Bedrock")
       (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
@@ -1079,7 +1080,8 @@ let%expect_test "stream_anthropic_haiku" =
        (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
          (delta
           ((role (assistant)) (content (ong)) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
+           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
       (system_fingerprint ()) (service_tier ()) (usage ()))
      ((id gen-1778404760-HzbZLh5i6tNjGlnRLzsQ) (provider "Amazon Bedrock")
       (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
@@ -1089,7 +1091,8 @@ let%expect_test "stream_anthropic_haiku" =
          (index 0)
          (delta
           ((role (assistant)) (content ("")) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
+           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
       (system_fingerprint ()) (service_tier ()) (usage ()))
      ((id gen-1778404760-HzbZLh5i6tNjGlnRLzsQ) (provider "Amazon Bedrock")
       (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
@@ -1099,7 +1102,8 @@ let%expect_test "stream_anthropic_haiku" =
          (index 0)
          (delta
           ((role (assistant)) (content ("")) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
+           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
       (system_fingerprint ()) (service_tier ())
       (usage
        (((prompt_tokens 13) (completion_tokens 5) (total_tokens 18)
@@ -1134,7 +1138,8 @@ let%expect_test "stream_anthropic_reasoning" =
            (reasoning_details
             (((format (anthropic-claude-v1)) (index (0)) (type_ (reasoning.text))
               (text (This)) (signature ()) (data ()))))
-           (images ()) (annotations ()) (tool_calls ()))))))
+           (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
       (system_fingerprint ()) (service_tier ()) (usage ()))
      ((id gen-1778404762-tuLs4if5ACychoL5FgWw) (provider "Amazon Bedrock")
       (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
@@ -1147,7 +1152,8 @@ let%expect_test "stream_anthropic_reasoning" =
            (reasoning_details
             (((format (anthropic-claude-v1)) (index (0)) (type_ (reasoning.text))
               (text (" is a straight")) (signature ()) (data ()))))
-           (images ()) (annotations ()) (tool_calls ()))))))
+           (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
       (system_fingerprint ()) (service_tier ()) (usage ()))
      ((id gen-1778404762-tuLs4if5ACychoL5FgWw) (provider "Amazon Bedrock")
       (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
@@ -1160,7 +1166,8 @@ let%expect_test "stream_anthropic_reasoning" =
            (reasoning_details
             (((format (anthropic-claude-v1)) (index (0)) (type_ (reasoning.text))
               (text ("forward arithmetic")) (signature ()) (data ()))))
-           (images ()) (annotations ()) (tool_calls ()))))))
+           (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
       (system_fingerprint ()) (service_tier ()) (usage ()))
      ((id gen-1778404762-tuLs4if5ACychoL5FgWw) (provider "Amazon Bedrock")
       (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
@@ -1173,7 +1180,8 @@ let%expect_test "stream_anthropic_reasoning" =
            (reasoning_details
             (((format (anthropic-claude-v1)) (index (0)) (type_ (reasoning.text))
               (text (" question. ")) (signature ()) (data ()))))
-           (images ()) (annotations ()) (tool_calls ()))))))
+           (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
       (system_fingerprint ()) (service_tier ()) (usage ()))
      ((id gen-1778404762-tuLs4if5ACychoL5FgWw) (provider "Amazon Bedrock")
       (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
@@ -1186,7 +1194,8 @@ let%expect_test "stream_anthropic_reasoning" =
            (reasoning_details
             (((format (anthropic-claude-v1)) (index (0)) (type_ (reasoning.text))
               (text ("1 + 1 = ")) (signature ()) (data ()))))
-           (images ()) (annotations ()) (tool_calls ()))))))
+           (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
       (system_fingerprint ()) (service_tier ()) (usage ()))
      ((id gen-1778404762-tuLs4if5ACychoL5FgWw) (provider "Amazon Bedrock")
       (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
@@ -1198,7 +1207,8 @@ let%expect_test "stream_anthropic_reasoning" =
            (reasoning_details
             (((format (anthropic-claude-v1)) (index (0)) (type_ (reasoning.text))
               (text (2.)) (signature ()) (data ()))))
-           (images ()) (annotations ()) (tool_calls ()))))))
+           (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
       (system_fingerprint ()) (service_tier ()) (usage ()))
      ((id gen-1778404762-tuLs4if5ACychoL5FgWw) (provider "Amazon Bedrock")
       (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
@@ -1213,7 +1223,8 @@ let%expect_test "stream_anthropic_reasoning" =
               (signature
                (EuMBCkgIDRABGAIqQBT3laJVTnu82MA+qIoM21rKNO7RavUnTB8hV2/jzC/qf/IkHKF+8sYptWVcO7SS3YeNr9R+77/331vMeJ5rnBUSDHmfEcEFvZ4NxlnXrRoMgUMHJQDVQQPGHZqmIjAxL0vdSycvENe6OtAw/BdZwR5+QTHW/cxWItq13SFnf0nu5n+AmDHv6mNx4sYGVsIqSQebHeU9PkpUtmYKYWtcCQZUXoJ7844EVTiVgGzy7G6LB/2a7mvcF/7ivM3oAcVFI9vhF2mFAB2IvVRFFvuoeOFJobt1TAfFZJkYAQ==))
               (data ()))))
-           (images ()) (annotations ()) (tool_calls ()))))))
+           (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
       (system_fingerprint ()) (service_tier ()) (usage ()))
      ((id gen-1778404762-tuLs4if5ACychoL5FgWw) (provider "Amazon Bedrock")
       (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
@@ -1222,7 +1233,8 @@ let%expect_test "stream_anthropic_reasoning" =
        (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
          (delta
           ((role (assistant)) (content (1)) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
+           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
       (system_fingerprint ()) (service_tier ()) (usage ()))
      ((id gen-1778404762-tuLs4if5ACychoL5FgWw) (provider "Amazon Bedrock")
       (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
@@ -1231,7 +1243,8 @@ let%expect_test "stream_anthropic_reasoning" =
        (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
          (delta
           ((role (assistant)) (content (" + 1 = **")) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
+           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
       (system_fingerprint ()) (service_tier ()) (usage ()))
      ((id gen-1778404762-tuLs4if5ACychoL5FgWw) (provider "Amazon Bedrock")
       (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
@@ -1240,7 +1253,8 @@ let%expect_test "stream_anthropic_reasoning" =
        (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
          (delta
           ((role (assistant)) (content (2**)) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
+           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
       (system_fingerprint ()) (service_tier ()) (usage ()))
      ((id gen-1778404762-tuLs4if5ACychoL5FgWw) (provider "Amazon Bedrock")
       (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
@@ -1250,7 +1264,8 @@ let%expect_test "stream_anthropic_reasoning" =
          (index 0)
          (delta
           ((role (assistant)) (content ("")) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
+           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
       (system_fingerprint ()) (service_tier ()) (usage ()))
      ((id gen-1778404762-tuLs4if5ACychoL5FgWw) (provider "Amazon Bedrock")
       (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
@@ -1260,7 +1275,8 @@ let%expect_test "stream_anthropic_reasoning" =
          (index 0)
          (delta
           ((role (assistant)) (content ("")) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
+           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
       (system_fingerprint ()) (service_tier ())
       (usage
        (((prompt_tokens 41) (completion_tokens 40) (total_tokens 81)
@@ -1292,7 +1308,8 @@ let%expect_test "stream_openai_with_usage" =
        (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
          (delta
           ((role (assistant)) (content (P)) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
+           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
       (system_fingerprint (fp_eb37e061ec)) (service_tier ()) (usage ()))
      ((id gen-1778404764-hvcUxQzjmt0eYSWjgRL8) (provider Azure)
       (model openai/gpt-4o-mini) (object_ chat.completion.chunk)
@@ -1301,7 +1318,8 @@ let%expect_test "stream_openai_with_usage" =
        (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
          (delta
           ((role (assistant)) (content (ong)) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
+           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
       (system_fingerprint (fp_eb37e061ec)) (service_tier ()) (usage ()))
      ((id gen-1778404764-hvcUxQzjmt0eYSWjgRL8) (provider Azure)
       (model openai/gpt-4o-mini) (object_ chat.completion.chunk)
@@ -1310,7 +1328,8 @@ let%expect_test "stream_openai_with_usage" =
        (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
          (delta
           ((role (assistant)) (content (!)) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
+           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
       (system_fingerprint (fp_eb37e061ec)) (service_tier ()) (usage ()))
      ((id gen-1778404764-hvcUxQzjmt0eYSWjgRL8) (provider Azure)
       (model openai/gpt-4o-mini) (object_ chat.completion.chunk)
@@ -1320,7 +1339,8 @@ let%expect_test "stream_openai_with_usage" =
          (index 0)
          (delta
           ((role (assistant)) (content ("")) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
+           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
       (system_fingerprint (fp_eb37e061ec)) (service_tier ()) (usage ()))
      ((id gen-1778404764-hvcUxQzjmt0eYSWjgRL8) (provider Azure)
       (model openai/gpt-4o-mini) (object_ chat.completion.chunk)
@@ -1330,7 +1350,8 @@ let%expect_test "stream_openai_with_usage" =
          (index 0)
          (delta
           ((role (assistant)) (content ("")) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
+           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
       (system_fingerprint (fp_eb37e061ec)) (service_tier ())
       (usage
        (((prompt_tokens 11) (completion_tokens 4) (total_tokens 15)

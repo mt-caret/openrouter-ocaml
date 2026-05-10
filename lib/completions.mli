@@ -30,7 +30,10 @@ module Image : sig
   end
 end
 
-(** Tool definition for function calling *)
+(** Tool definition for function calling and OpenRouter server-side tools.
+    Server tools (web search, web fetch, datetime, image generation) are
+    executed by OpenRouter on your behalf and their results fed back to the
+    model — no local function dispatch required. *)
 module Tool : sig
   module Function : sig
     type t =
@@ -41,13 +44,60 @@ module Tool : sig
     [@@deriving sexp_of]
   end
 
+  module Web_search : sig
+    type t =
+      { engine : string option
+      ; max_total_results : int option
+      ; allowed_domains : string list option
+      ; blocked_domains : string list option
+      }
+    [@@deriving sexp_of]
+  end
+
+  module Web_fetch : sig
+    type t =
+      { engine : string option
+      ; max_uses : int option
+      ; max_content_tokens : int option
+      ; allowed_domains : string list option
+      ; blocked_domains : string list option
+      }
+    [@@deriving sexp_of]
+  end
+
+  module Image_generation : sig
+    type t = { prompt : string option } [@@deriving sexp_of]
+  end
+
   type t =
-    { type_ : string
-    ; function_ : Function.t
-    }
+    | Function of Function.t
+    | Web_search of Web_search.t
+    | Web_fetch of Web_fetch.t
+    | Datetime
+    | Image_generation of Image_generation.t
   [@@deriving jsonaf, sexp_of]
 
-  val create : name:string -> ?description:string -> ?parameters:Jsonaf.t -> unit -> t
+  val function_ : name:string -> ?description:string -> ?parameters:Jsonaf.t -> unit -> t
+
+  val web_search
+    :  ?engine:string
+    -> ?max_total_results:int
+    -> ?allowed_domains:string list
+    -> ?blocked_domains:string list
+    -> unit
+    -> t
+
+  val web_fetch
+    :  ?engine:string
+    -> ?max_uses:int
+    -> ?max_content_tokens:int
+    -> ?allowed_domains:string list
+    -> ?blocked_domains:string list
+    -> unit
+    -> t
+
+  val datetime : t
+  val image_generation : ?prompt:string -> unit -> t
 end
 
 (** Tool choice configuration *)
@@ -131,13 +181,29 @@ module Plugin : sig
     val default : t
   end
 
+  module Response_healing : sig
+    type t = { id : string } [@@deriving sexp_of]
+
+    val default : t
+  end
+
+  module Context_compression : sig
+    type t = { id : string } [@@deriving sexp_of]
+
+    val default : t
+  end
+
   type t =
     | Web of Web.t
     | File_parser of File_parser.t
+    | Response_healing of Response_healing.t
+    | Context_compression of Context_compression.t
   [@@deriving jsonaf, sexp_of]
 
   val web : ?enabled:bool -> ?max_results:int -> unit -> t
   val file_parser : ?pdf_engine:Pdf_engine.t -> unit -> t
+  val response_healing : t
+  val context_compression : t
 end
 
 (** URL citation from web search results. *)
@@ -206,20 +272,90 @@ module Request : sig
         [@@deriving sexp_of]
       end
 
+      module Input_audio : sig
+        type t =
+          { data : string (** Base64-encoded audio bytes (no [data:] prefix). *)
+          ; format : string (** e.g. "wav", "mp3", "aiff", "aac", "ogg", "flac". *)
+          }
+        [@@deriving sexp_of]
+      end
+
+      module Video_url : sig
+        type t = { url : string } [@@deriving sexp_of]
+      end
+
+      (** Anthropic-style prompt-cache annotation. Attach to a content part
+          and successive identical-prefix requests will hit the cache, yielding
+          a non-zero [usage.prompt_tokens_details.cached_tokens]. *)
+      module Cache_control : sig
+        type t =
+          { type_ : string (** Always ["ephemeral"]. *)
+          ; ttl : string option
+          }
+        [@@deriving sexp_of]
+
+        val ephemeral : ?ttl:string -> unit -> t
+      end
+
       type t =
-        | Text of { text : string }
-        | Image_url of { image_url : Image_url.t }
-        | File of { file : File_data.t }
+        | Text of
+            { text : string
+            ; cache_control : Cache_control.t option
+            }
+        | Image_url of
+            { image_url : Image_url.t
+            ; cache_control : Cache_control.t option
+            }
+        | File of
+            { file : File_data.t
+            ; cache_control : Cache_control.t option
+            }
+        | Input_audio of
+            { input_audio : Input_audio.t
+            ; cache_control : Cache_control.t option
+            }
+        | Video_url of
+            { video_url : Video_url.t
+            ; cache_control : Cache_control.t option
+            }
       [@@deriving sexp_of]
 
-      val text : string -> t
+      val text : ?cache_control:Cache_control.t -> string -> t
 
       (** [mime_type] should be e.g. "image/jpeg", "image/png", "image/webp", "image/gif" *)
-      val image_base64 : mime_type:string -> data:string -> t
+      val image_base64
+        :  ?cache_control:Cache_control.t
+        -> mime_type:string
+        -> data:string
+        -> unit
+        -> t
 
       (** [file_data] can be either a URL (for publicly accessible files) or a data URL
           like "data:application/pdf;base64,..." for local files *)
-      val file : filename:string -> file_data:string -> t
+      val file
+        :  ?cache_control:Cache_control.t
+        -> filename:string
+        -> file_data:string
+        -> unit
+        -> t
+
+      (** [data] is base64-encoded audio bytes (no [data:] prefix); [format] is
+          e.g. "wav", "mp3". *)
+      val audio
+        :  ?cache_control:Cache_control.t
+        -> format:string
+        -> data:string
+        -> unit
+        -> t
+
+      val video_url : ?cache_control:Cache_control.t -> url:string -> unit -> t
+
+      val video_base64
+        :  ?cache_control:Cache_control.t
+        -> mime_type:string
+        -> data:string
+        -> unit
+        -> t
     end
 
     module Content : sig
@@ -273,6 +409,17 @@ module Request : sig
       ; enabled : bool option
       }
     [@@deriving jsonaf, sexp_of]
+
+    (** Validates [effort] and [max_tokens] are not both set, matching the
+        wire contract. Returns an [Or_error] so the failure surfaces locally
+        instead of as a 400. *)
+    val create
+      :  ?effort:Effort.t
+      -> ?max_tokens:int
+      -> ?exclude:bool
+      -> ?enabled:bool
+      -> unit
+      -> t Or_error.t
   end
 
   module Verbosity : sig
@@ -290,6 +437,64 @@ module Request : sig
 
   module Stream_options : sig
     type t = { include_usage : bool option } [@@deriving jsonaf, sexp_of]
+  end
+
+  module Provider : sig
+    module Sort : sig
+      type t =
+        | Price
+        | Throughput
+        | Latency
+      [@@deriving equal, sexp_of]
+
+      include Stringable.S with type t := t
+      include Jsonaf.Jsonafable.S with type t := t
+    end
+
+    module Data_collection : sig
+      type t =
+        | Allow
+        | Deny
+      [@@deriving equal, sexp_of]
+
+      include Stringable.S with type t := t
+      include Jsonaf.Jsonafable.S with type t := t
+    end
+
+    module Max_price : sig
+      type t =
+        { prompt : float option
+        ; completion : float option
+        ; request : float option
+        ; image : float option
+        }
+      [@@deriving equal, jsonaf, sexp_of]
+    end
+
+    type t =
+      { order : string list option
+      ; allow_fallbacks : bool option
+      ; require_parameters : bool option
+      ; data_collection : Data_collection.t option
+      ; zdr : bool option
+      ; only : string list option
+      ; ignore : string list option
+      ; quantizations : string list option
+      ; sort : Sort.t option
+      ; max_price : Max_price.t option
+      ; preferred_min_throughput : float option
+      ; preferred_max_latency : float option
+      }
+    [@@deriving equal, jsonaf, sexp_of]
+
+    (** All-[None] record — equivalent to omitting the [provider] field
+        entirely, used as a base for callers that build the record one
+        knob at a time. *)
+    val empty : t
+
+    (** [true] iff [t = empty]. Useful for deciding whether to attach the
+        [provider] field at all. *)
+    val is_empty : t -> bool
   end
 
   module Logit_bias : sig
@@ -325,39 +530,86 @@ module Request : sig
       -> t
   end
 
-  type t =
-    { model : string
-    ; messages : Message.t list
-    ; stream : bool
-    ; reasoning : Reasoning.t option
-    ; tools : Tool.t list
-    ; tool_choice : Tool_choice.t option
-    ; parallel_tool_calls : bool option
-    ; plugins : Plugin.t list
-    ; temperature : float option
-    ; top_p : float option
-    ; top_k : int option
-    ; min_p : float option
-    ; top_a : float option
-    ; max_tokens : int option
-    ; max_completion_tokens : int option
-    ; seed : int option
-    ; stop : string list option
-    ; frequency_penalty : float option
-    ; presence_penalty : float option
-    ; repetition_penalty : float option
-    ; logit_bias : Logit_bias.t option
-    ; logprobs : bool option
-    ; top_logprobs : int option
-    ; verbosity : Verbosity.t option
-    ; response_format : Response_format.t option
-    ; modalities : string list option
-    ; stream_options : Stream_options.t option
-    ; service_tier : string option
-    ; models : string list
-    ; transforms : string list
-    }
-  [@@deriving jsonaf, sexp_of]
+  (** A request body, phantom-tagged with its streaming kind. The tag is
+      enforced by [Completions.create] (which requires [`Non_streaming]) and
+      [Completions.create_stream] (which requires [`Streaming]) — you can't
+      hand a streaming request to the non-streaming entry point or vice
+      versa. Construct via [create] / [create_streaming]; serialize via the
+      [%jsonaf_of: [`Non_streaming] Request.t] extension form. *)
+  type 'tag t [@@deriving jsonaf, sexp_of]
+
+  (** Build a non-streaming request — the body for [Completions.create].
+      Required: [~model] and [~messages]; everything else defaults. *)
+  val create
+    :  ?reasoning:Reasoning.t
+    -> ?tools:Tool.t list
+    -> ?tool_choice:Tool_choice.t
+    -> ?parallel_tool_calls:bool
+    -> ?plugins:Plugin.t list
+    -> ?temperature:float
+    -> ?top_p:float
+    -> ?top_k:int
+    -> ?min_p:float
+    -> ?top_a:float
+    -> ?max_tokens:int
+    -> ?max_completion_tokens:int
+    -> ?seed:int
+    -> ?stop:string list
+    -> ?frequency_penalty:float
+    -> ?presence_penalty:float
+    -> ?repetition_penalty:float
+    -> ?logit_bias:Logit_bias.t
+    -> ?logprobs:bool
+    -> ?top_logprobs:int
+    -> ?verbosity:Verbosity.t
+    -> ?response_format:Response_format.t
+    -> ?structured_outputs:bool
+    -> ?modalities:string list
+    -> ?stream_options:Stream_options.t
+    -> ?service_tier:string
+    -> ?models:string list
+    -> ?transforms:string list
+    -> ?provider:Provider.t
+    -> model:string
+    -> messages:Message.t list
+    -> unit
+    -> [ `Non_streaming ] t
+
+  (** Build a streaming request — the body for [Completions.create_stream]. *)
+  val create_streaming
+    :  ?reasoning:Reasoning.t
+    -> ?tools:Tool.t list
+    -> ?tool_choice:Tool_choice.t
+    -> ?parallel_tool_calls:bool
+    -> ?plugins:Plugin.t list
+    -> ?temperature:float
+    -> ?top_p:float
+    -> ?top_k:int
+    -> ?min_p:float
+    -> ?top_a:float
+    -> ?max_tokens:int
+    -> ?max_completion_tokens:int
+    -> ?seed:int
+    -> ?stop:string list
+    -> ?frequency_penalty:float
+    -> ?presence_penalty:float
+    -> ?repetition_penalty:float
+    -> ?logit_bias:Logit_bias.t
+    -> ?logprobs:bool
+    -> ?top_logprobs:int
+    -> ?verbosity:Verbosity.t
+    -> ?response_format:Response_format.t
+    -> ?structured_outputs:bool
+    -> ?modalities:string list
+    -> ?stream_options:Stream_options.t
+    -> ?service_tier:string
+    -> ?models:string list
+    -> ?transforms:string list
+    -> ?provider:Provider.t
+    -> model:string
+    -> messages:Message.t list
+    -> unit
+    -> [ `Streaming ] t
 end
 
 module Logprobs : sig
@@ -512,8 +764,13 @@ module Stream_chunk : sig
       ; native_finish_reason : string option
       ; index : int
       ; delta : Delta.t
+      ; error : Jsonaf.t option
+        (** Populated when the upstream provider fails after generation has
+            begun. Schema is provider-specific so we keep it as raw JSON. *)
       }
     [@@deriving sexp_of]
+
+    val is_error : t -> bool
   end
 
   type t =
@@ -536,7 +793,7 @@ val create
   -> ?on_response_body:(string -> unit Deferred.t)
        (** Invoked with the raw HTTP response body before parsing — useful for
            capturing fixtures or logging unexpected shapes. *)
-  -> Request.t
+  -> [ `Non_streaming ] Request.t
   -> Response.t Or_error.t Deferred.t
 
 val create_stream
@@ -546,7 +803,7 @@ val create_stream
        (** Invoked with each raw JSON payload (the [data: ...] portion of an SSE
            line, with the [data: ] prefix stripped) before parsing. Useful for
            capturing fixtures or logging unexpected shapes. *)
-  -> Request.t
+  -> [ `Streaming ] Request.t
   -> Stream_chunk.t Or_error.t Pipe.Reader.t Deferred.t
 
 module For_testing : sig

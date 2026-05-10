@@ -11,6 +11,11 @@ OpenRouter API example client
                              . send X-OpenRouter-Experimental-Metadata: enabled
   . [-app-referer URL]       . value for HTTP-Referer header (app attribution)
   . [-app-title NAME]        . value for X-Title header (app attribution)
+  . [-cache-system-prompt TEXT]
+                             . prepend a cached system-prompt content part with
+                               cache_control = ephemeral (Anthropic-style prompt
+                               caching)
+  . [-context-compression]   . enable context-compression plugin
   . [-fallback-model MODEL] ...
                              . fallback model id, in priority order (may be
                                repeated)
@@ -39,6 +44,24 @@ OpenRouter API example client
   . [-no-stream]             . disable streaming (use non-streaming API)
   . [-presence-penalty FLOAT]
                              . presence penalty
+  . [-provider-data-collection MODE]
+                             . allow|deny — restrict providers by
+                               data-collection policy
+  . [-provider-ignore NAME] ...
+                             . exclude this provider from routing (may be
+                               repeated)
+  . [-provider-no-fallbacks] . disable provider fallbacks (sets
+                               allow_fallbacks=false)
+  . [-provider-only NAME] ...
+                             . restrict routing to this provider (may be
+                               repeated)
+  . [-provider-order NAME] ...
+                             . try providers in this order (may be repeated)
+  . [-provider-require-parameters]
+                             . require providers that support all request
+                               parameters
+  . [-provider-sort SORT]    . route preference (price|throughput|latency)
+  . [-provider-zdr]          . restrict to Zero Data Retention endpoints
   . [-reasoning TOKENS]      . enable reasoning with max tokens budget
   . [-reasoning-effort EFFORT]
                              . reasoning effort
@@ -47,10 +70,17 @@ OpenRouter API example client
   . [-reasoning-exclude]     . hide reasoning from response output
   . [-repetition-penalty FLOAT]
                              . repetition penalty
+  . [-response-healing]      . enable response-healing plugin
   . [-seed N]                . RNG seed for reproducibility
+  . [-server-datetime]       . enable server-side openrouter:datetime tool
+  . [-server-web-fetch]      . enable server-side openrouter:web_fetch tool
+  . [-server-web-search]     . enable server-side openrouter:web_search tool
+                               (model decides when to call)
   . [-service-tier TIER]     . service tier (e.g. auto, default, flex, priority)
   . [-stop STR] ...          . stop sequence (may be repeated, up to 4)
   . [-stream-usage]          . include final usage chunk in streaming responses
+  . [-structured-outputs]    . set structured_outputs=true (strict-mode flag
+                               complementary to -json-schema)
   . [-temperature FLOAT]     . sampling temperature
   . [-top-a FLOAT]           . top-a sampling cutoff
   . [-top-k N]               . top-k sampling cutoff

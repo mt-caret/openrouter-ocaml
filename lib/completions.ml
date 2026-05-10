@@ -71,15 +71,87 @@ module Tool = struct
     [@@deriving equal, jsonaf, sexp_of]
   end
 
-  type t =
-    { type_ : string [@key "type"] (* Always "function" *)
-    ; function_ : Function.t [@key "function"]
-    }
-  [@@deriving equal, jsonaf, sexp_of]
+  module Web_search = struct
+    type t =
+      { engine : string option [@jsonaf.option]
+      ; max_total_results : int option [@jsonaf.option]
+      ; allowed_domains : string list option [@jsonaf.option]
+      ; blocked_domains : string list option [@jsonaf.option]
+      }
+    [@@deriving equal, jsonaf, sexp_of]
+  end
 
-  let create ~name ?description ?parameters () =
-    { type_ = "function"; function_ = { name; description; parameters } }
+  module Web_fetch = struct
+    type t =
+      { engine : string option [@jsonaf.option]
+      ; max_uses : int option [@jsonaf.option]
+      ; max_content_tokens : int option [@jsonaf.option]
+      ; allowed_domains : string list option [@jsonaf.option]
+      ; blocked_domains : string list option [@jsonaf.option]
+      }
+    [@@deriving equal, jsonaf, sexp_of]
+  end
+
+  module Image_generation = struct
+    type t = { prompt : string option [@jsonaf.option] }
+    [@@deriving equal, jsonaf, sexp_of]
+  end
+
+  type t =
+    | Function of Function.t
+    | Web_search of Web_search.t
+    | Web_fetch of Web_fetch.t
+    | Datetime
+    | Image_generation of Image_generation.t
+  [@@deriving equal, sexp_of]
+
+  let to_jsonaf = Tagged_union.to_jsonaf ~discriminator:"type"
+
+  let jsonaf_of_t = function
+    | Function f ->
+      to_jsonaf ~tag:"function" ~extra_fields:[ "function", Function.jsonaf_of_t f ] ()
+    | Web_search cfg ->
+      to_jsonaf ~tag:"openrouter:web_search" ~inline:(Web_search.jsonaf_of_t cfg) ()
+    | Web_fetch cfg ->
+      to_jsonaf ~tag:"openrouter:web_fetch" ~inline:(Web_fetch.jsonaf_of_t cfg) ()
+    | Datetime -> to_jsonaf ~tag:"openrouter:datetime" ()
+    | Image_generation cfg ->
+      to_jsonaf
+        ~tag:"openrouter:image_generation"
+        ~inline:(Image_generation.jsonaf_of_t cfg)
+        ()
   ;;
+
+  let t_of_jsonaf =
+    Tagged_union.of_jsonaf ~discriminator:"type" ~handle_tag:(fun tag json ->
+      match tag with
+      | "function" ->
+        (match Jsonaf.member "function" json with
+         | Some f -> Function (Function.t_of_jsonaf f)
+         | None -> Jsonaf_kernel.Conv.of_jsonaf_error "Missing 'function' field" json)
+      | "openrouter:web_search" -> Web_search (Web_search.t_of_jsonaf json)
+      | "openrouter:web_fetch" -> Web_fetch (Web_fetch.t_of_jsonaf json)
+      | "openrouter:datetime" -> Datetime
+      | "openrouter:image_generation" ->
+        Image_generation (Image_generation.t_of_jsonaf json)
+      | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Unknown tool type" json)
+  ;;
+
+  let function_ ~name ?description ?parameters () =
+    Function { name; description; parameters }
+  ;;
+
+  let web_search ?engine ?max_total_results ?allowed_domains ?blocked_domains () =
+    Web_search { engine; max_total_results; allowed_domains; blocked_domains }
+  ;;
+
+  let web_fetch ?engine ?max_uses ?max_content_tokens ?allowed_domains ?blocked_domains ()
+    =
+    Web_fetch { engine; max_uses; max_content_tokens; allowed_domains; blocked_domains }
+  ;;
+
+  let datetime = Datetime
+  let image_generation ?prompt () = Image_generation { prompt }
 end
 
 module Tool_choice = struct
@@ -180,21 +252,41 @@ module Plugin = struct
     let default = { id = "file-parser"; pdf = None }
   end
 
+  module Response_healing = struct
+    type t = { id : string } [@@deriving equal, jsonaf, sexp_of]
+
+    let default = { id = "response-healing" }
+  end
+
+  module Context_compression = struct
+    type t = { id : string } [@@deriving equal, jsonaf, sexp_of]
+
+    let default = { id = "context-compression" }
+  end
+
   type t =
     | Web of Web.t
     | File_parser of File_parser.t
+    | Response_healing of Response_healing.t
+    | Context_compression of Context_compression.t
   [@@deriving equal, sexp_of]
 
   let jsonaf_of_t = function
     | Web w -> Web.jsonaf_of_t w
     | File_parser f -> File_parser.jsonaf_of_t f
+    | Response_healing r -> Response_healing.jsonaf_of_t r
+    | Context_compression c -> Context_compression.jsonaf_of_t c
   ;;
 
-  let t_of_jsonaf json =
-    match Jsonaf.member "id" json with
-    | Some (`String "web") -> Web (Web.t_of_jsonaf json)
-    | Some (`String "file-parser") -> File_parser (File_parser.t_of_jsonaf json)
-    | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Unknown plugin id" json
+  let t_of_jsonaf =
+    Tagged_union.of_jsonaf ~discriminator:"id" ~handle_tag:(fun tag json ->
+      match tag with
+      | "web" -> Web (Web.t_of_jsonaf json)
+      | "file-parser" -> File_parser (File_parser.t_of_jsonaf json)
+      | "response-healing" -> Response_healing (Response_healing.t_of_jsonaf json)
+      | "context-compression" ->
+        Context_compression (Context_compression.t_of_jsonaf json)
+      | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Unknown plugin id" json)
   ;;
 
   let web ?enabled ?max_results () = Web { id = "web"; enabled; max_results }
@@ -205,6 +297,9 @@ module Plugin = struct
     in
     File_parser { id = "file-parser"; pdf }
   ;;
+
+  let response_healing = Response_healing Response_healing.default
+  let context_compression = Context_compression Context_compression.default
 end
 
 module Citation = struct
@@ -293,46 +388,143 @@ module Request = struct
         [@@deriving equal, jsonaf, sexp_of]
       end
 
+      module Input_audio = struct
+        type t =
+          { data : string (** Base64-encoded audio bytes (no [data:] prefix). *)
+          ; format : string (** e.g. "wav", "mp3", "aiff", "aac", "ogg", "flac". *)
+          }
+        [@@deriving equal, jsonaf, sexp_of]
+      end
+
+      module Video_url = struct
+        type t = { url : string } [@@deriving equal, jsonaf, sexp_of]
+      end
+
+      module Cache_control = struct
+        type t =
+          { type_ : string [@key "type"]
+          ; ttl : string option [@jsonaf.option]
+          }
+        [@@deriving equal, jsonaf, sexp_of]
+
+        let ephemeral ?ttl () = { type_ = "ephemeral"; ttl }
+      end
+
       type t =
-        | Text of { text : string }
-        | Image_url of { image_url : Image_url.t }
-        | File of { file : File_data.t }
+        | Text of
+            { text : string
+            ; cache_control : Cache_control.t option
+            }
+        | Image_url of
+            { image_url : Image_url.t
+            ; cache_control : Cache_control.t option
+            }
+        | File of
+            { file : File_data.t
+            ; cache_control : Cache_control.t option
+            }
+        | Input_audio of
+            { input_audio : Input_audio.t
+            ; cache_control : Cache_control.t option
+            }
+        | Video_url of
+            { video_url : Video_url.t
+            ; cache_control : Cache_control.t option
+            }
       [@@deriving equal, sexp_of]
 
-      let text s = Text { text = s }
+      let text ?cache_control s = Text { text = s; cache_control }
 
-      let image_base64 ~mime_type ~data =
+      let image_base64 ?cache_control ~mime_type ~data () =
         let url = sprintf "data:%s;base64,%s" mime_type data in
-        Image_url { image_url = { url } }
+        Image_url { image_url = { url }; cache_control }
       ;;
 
-      let file ~filename ~file_data = File { file = { filename; file_data } }
+      let file ?cache_control ~filename ~file_data () =
+        File { file = { filename; file_data }; cache_control }
+      ;;
+
+      let audio ?cache_control ~format ~data () =
+        Input_audio { input_audio = { data; format }; cache_control }
+      ;;
+
+      let video_url ?cache_control ~url () =
+        Video_url { video_url = { url }; cache_control }
+      ;;
+
+      let video_base64 ?cache_control ~mime_type ~data () =
+        let url = sprintf "data:%s;base64,%s" mime_type data in
+        Video_url { video_url = { url }; cache_control }
+      ;;
+
+      let to_jsonaf ~tag ~extra_fields cache_control =
+        let extra_fields =
+          match cache_control with
+          | None -> extra_fields
+          | Some cc -> extra_fields @ [ "cache_control", Cache_control.jsonaf_of_t cc ]
+        in
+        Tagged_union.to_jsonaf ~discriminator:"type" ~tag ~extra_fields ()
+      ;;
 
       let jsonaf_of_t = function
-        | Text { text } -> `Object [ "type", `String "text"; "text", `String text ]
-        | Image_url { image_url } ->
-          `Object
-            [ "type", `String "image_url"; "image_url", Image_url.jsonaf_of_t image_url ]
-        | File { file } ->
-          `Object [ "type", `String "file"; "file", File_data.jsonaf_of_t file ]
+        | Text { text; cache_control } ->
+          to_jsonaf ~tag:"text" ~extra_fields:[ "text", `String text ] cache_control
+        | Image_url { image_url; cache_control } ->
+          to_jsonaf
+            ~tag:"image_url"
+            ~extra_fields:[ "image_url", Image_url.jsonaf_of_t image_url ]
+            cache_control
+        | File { file; cache_control } ->
+          to_jsonaf
+            ~tag:"file"
+            ~extra_fields:[ "file", File_data.jsonaf_of_t file ]
+            cache_control
+        | Input_audio { input_audio; cache_control } ->
+          to_jsonaf
+            ~tag:"input_audio"
+            ~extra_fields:[ "input_audio", Input_audio.jsonaf_of_t input_audio ]
+            cache_control
+        | Video_url { video_url; cache_control } ->
+          to_jsonaf
+            ~tag:"video_url"
+            ~extra_fields:[ "video_url", Video_url.jsonaf_of_t video_url ]
+            cache_control
       ;;
 
       let t_of_jsonaf json =
-        match Jsonaf.member "type" json with
-        | Some (`String "text") ->
-          (match Jsonaf.member "text" json with
-           | Some (`String text) -> Text { text }
-           | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Expected 'text' field" json)
-        | Some (`String "image_url") ->
-          (match Jsonaf.member "image_url" json with
-           | Some image_url_json ->
-             Image_url { image_url = Image_url.t_of_jsonaf image_url_json }
-           | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Expected 'image_url' field" json)
-        | Some (`String "file") ->
-          (match Jsonaf.member "file" json with
-           | Some file_json -> File { file = File_data.t_of_jsonaf file_json }
-           | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Expected 'file' field" json)
-        | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Unknown content part type" json
+        let cache_control =
+          Option.map (Jsonaf.member "cache_control" json) ~f:Cache_control.t_of_jsonaf
+        in
+        let require_member key =
+          match Jsonaf.member key json with
+          | Some j -> j
+          | None ->
+            Jsonaf_kernel.Conv.of_jsonaf_error [%string "Expected '%{key}' field"] json
+        in
+        Tagged_union.of_jsonaf ~discriminator:"type" json ~handle_tag:(fun tag _ ->
+          match tag with
+          | "text" ->
+            (match require_member "text" with
+             | `String text -> Text { text; cache_control }
+             | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Expected string 'text'" json)
+          | "image_url" ->
+            Image_url
+              { image_url = Image_url.t_of_jsonaf (require_member "image_url")
+              ; cache_control
+              }
+          | "file" ->
+            File { file = File_data.t_of_jsonaf (require_member "file"); cache_control }
+          | "input_audio" ->
+            Input_audio
+              { input_audio = Input_audio.t_of_jsonaf (require_member "input_audio")
+              ; cache_control
+              }
+          | "video_url" ->
+            Video_url
+              { video_url = Video_url.t_of_jsonaf (require_member "video_url")
+              ; cache_control
+              }
+          | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Unknown content part type" json)
       ;;
     end
 
@@ -437,6 +629,16 @@ module Request = struct
       ; enabled : bool option [@jsonaf.option]
       }
     [@@deriving jsonaf, sexp_of]
+
+    (* OpenRouter's reasoning API spec: "[effort] and [max_tokens] are
+       mutually exclusive". Enforce that here so the failure surfaces locally
+       instead of as a 400 from the wire. *)
+    let create ?effort ?max_tokens ?exclude ?enabled () =
+      match effort, max_tokens with
+      | Some _, Some _ ->
+        Or_error.error_string "Reasoning: effort and max_tokens are mutually exclusive"
+      | _ -> Ok { effort; max_tokens; exclude; enabled }
+    ;;
   end
 
   module Verbosity = struct
@@ -456,6 +658,77 @@ module Request = struct
 
   module Stream_options = struct
     type t = { include_usage : bool option [@jsonaf.option] } [@@deriving jsonaf, sexp_of]
+  end
+
+  module Provider = struct
+    module Sort = struct
+      module T = struct
+        type t =
+          | Price
+          | Throughput
+          | Latency
+        [@@deriving equal, sexp_of, enumerate]
+      end
+
+      include T
+      include String_variant.Make (T)
+    end
+
+    module Data_collection = struct
+      module T = struct
+        type t =
+          | Allow
+          | Deny
+        [@@deriving equal, sexp_of, enumerate]
+      end
+
+      include T
+      include String_variant.Make (T)
+    end
+
+    module Max_price = struct
+      type t =
+        { prompt : float option [@jsonaf.option]
+        ; completion : float option [@jsonaf.option]
+        ; request : float option [@jsonaf.option]
+        ; image : float option [@jsonaf.option]
+        }
+      [@@deriving equal, jsonaf, sexp_of]
+    end
+
+    type t =
+      { order : string list option [@jsonaf.option]
+      ; allow_fallbacks : bool option [@jsonaf.option]
+      ; require_parameters : bool option [@jsonaf.option]
+      ; data_collection : Data_collection.t option [@jsonaf.option]
+      ; zdr : bool option [@jsonaf.option]
+      ; only : string list option [@jsonaf.option]
+      ; ignore : string list option [@jsonaf.option]
+      ; quantizations : string list option [@jsonaf.option]
+      ; sort : Sort.t option [@jsonaf.option]
+      ; max_price : Max_price.t option [@jsonaf.option]
+      ; preferred_min_throughput : float option [@jsonaf.option]
+      ; preferred_max_latency : float option [@jsonaf.option]
+      }
+    [@@deriving equal, jsonaf, sexp_of]
+
+    let empty =
+      { order = None
+      ; allow_fallbacks = None
+      ; require_parameters = None
+      ; data_collection = None
+      ; zdr = None
+      ; only = None
+      ; ignore = None
+      ; quantizations = None
+      ; sort = None
+      ; max_price = None
+      ; preferred_min_throughput = None
+      ; preferred_max_latency = None
+      }
+    ;;
+
+    let is_empty t = equal t empty
   end
 
   module Logit_bias = struct
@@ -498,25 +771,36 @@ module Request = struct
       Json_schema { Json_schema.name; strict; schema; description }
     ;;
 
+    let to_jsonaf = Tagged_union.to_jsonaf ~discriminator:"type"
+
     let jsonaf_of_t = function
-      | Json_object -> `Object [ "type", `String "json_object" ]
+      | Json_object -> to_jsonaf ~tag:"json_object" ()
       | Json_schema schema ->
-        `Object
-          [ "type", `String "json_schema"; "json_schema", Json_schema.jsonaf_of_t schema ]
+        to_jsonaf
+          ~tag:"json_schema"
+          ~extra_fields:[ "json_schema", Json_schema.jsonaf_of_t schema ]
+          ()
     ;;
 
-    let t_of_jsonaf json =
-      match Jsonaf.member "type" json with
-      | Some (`String "json_object") -> Json_object
-      | Some (`String "json_schema") ->
-        (match Jsonaf.member "json_schema" json with
-         | Some s -> Json_schema (Json_schema.t_of_jsonaf s)
-         | None -> Jsonaf_kernel.Conv.of_jsonaf_error "Missing 'json_schema' field" json)
-      | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Unknown response_format type" json
+    let t_of_jsonaf =
+      Tagged_union.of_jsonaf ~discriminator:"type" ~handle_tag:(fun tag json ->
+        match tag with
+        | "json_object" -> Json_object
+        | "json_schema" ->
+          (match Jsonaf.member "json_schema" json with
+           | Some s -> Json_schema (Json_schema.t_of_jsonaf s)
+           | None -> Jsonaf_kernel.Conv.of_jsonaf_error "Missing 'json_schema' field" json)
+        | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Unknown response_format type" json)
     ;;
   end
 
-  type t =
+  (* The tag is a purely type-level discriminator that prevents passing a
+     streaming request to the non-streaming entry point (and vice versa);
+     it doesn't appear in the wire format. ppx_jsonaf_conv threads a dummy
+     converter through [jsonaf_of_t]/[sexp_of_t], so call sites that want
+     to serialize go through the [%jsonaf_of: [`Non_streaming] Request.t]
+     extension form. *)
+  type 'tag t =
     { model : string
     ; messages : Message.t list
     ; stream : bool
@@ -542,13 +826,228 @@ module Request = struct
     ; top_logprobs : int option [@jsonaf.option]
     ; verbosity : Verbosity.t option [@jsonaf.option]
     ; response_format : Response_format.t option [@jsonaf.option]
+    ; structured_outputs : bool option [@jsonaf.option]
     ; modalities : string list option [@jsonaf.option]
     ; stream_options : Stream_options.t option [@jsonaf.option]
     ; service_tier : string option [@jsonaf.option]
     ; models : string list [@default []] [@jsonaf_drop_default.equal]
     ; transforms : string list [@default []] [@jsonaf_drop_default.equal]
+    ; provider : Provider.t option [@jsonaf.option]
     }
   [@@deriving jsonaf, sexp_of]
+
+  let create_body
+        ~stream
+        ?reasoning
+        ?(tools = [])
+        ?tool_choice
+        ?parallel_tool_calls
+        ?(plugins = [])
+        ?temperature
+        ?top_p
+        ?top_k
+        ?min_p
+        ?top_a
+        ?max_tokens
+        ?max_completion_tokens
+        ?seed
+        ?stop
+        ?frequency_penalty
+        ?presence_penalty
+        ?repetition_penalty
+        ?logit_bias
+        ?logprobs
+        ?top_logprobs
+        ?verbosity
+        ?response_format
+        ?structured_outputs
+        ?modalities
+        ?stream_options
+        ?service_tier
+        ?(models = [])
+        ?(transforms = [])
+        ?provider
+        ~model
+        ~messages
+        ()
+    : 'tag t
+    =
+    { model
+    ; messages
+    ; stream
+    ; reasoning
+    ; tools
+    ; tool_choice
+    ; parallel_tool_calls
+    ; plugins
+    ; temperature
+    ; top_p
+    ; top_k
+    ; min_p
+    ; top_a
+    ; max_tokens
+    ; max_completion_tokens
+    ; seed
+    ; stop
+    ; frequency_penalty
+    ; presence_penalty
+    ; repetition_penalty
+    ; logit_bias
+    ; logprobs
+    ; top_logprobs
+    ; verbosity
+    ; response_format
+    ; structured_outputs
+    ; modalities
+    ; stream_options
+    ; service_tier
+    ; models
+    ; transforms
+    ; provider
+    }
+  ;;
+
+  let create
+        ?reasoning
+        ?tools
+        ?tool_choice
+        ?parallel_tool_calls
+        ?plugins
+        ?temperature
+        ?top_p
+        ?top_k
+        ?min_p
+        ?top_a
+        ?max_tokens
+        ?max_completion_tokens
+        ?seed
+        ?stop
+        ?frequency_penalty
+        ?presence_penalty
+        ?repetition_penalty
+        ?logit_bias
+        ?logprobs
+        ?top_logprobs
+        ?verbosity
+        ?response_format
+        ?structured_outputs
+        ?modalities
+        ?stream_options
+        ?service_tier
+        ?models
+        ?transforms
+        ?provider
+        ~model
+        ~messages
+        ()
+    : [ `Non_streaming ] t
+    =
+    create_body
+      ~stream:false
+      ?reasoning
+      ?tools
+      ?tool_choice
+      ?parallel_tool_calls
+      ?plugins
+      ?temperature
+      ?top_p
+      ?top_k
+      ?min_p
+      ?top_a
+      ?max_tokens
+      ?max_completion_tokens
+      ?seed
+      ?stop
+      ?frequency_penalty
+      ?presence_penalty
+      ?repetition_penalty
+      ?logit_bias
+      ?logprobs
+      ?top_logprobs
+      ?verbosity
+      ?response_format
+      ?structured_outputs
+      ?modalities
+      ?stream_options
+      ?service_tier
+      ?models
+      ?transforms
+      ?provider
+      ~model
+      ~messages
+      ()
+  ;;
+
+  let create_streaming
+        ?reasoning
+        ?tools
+        ?tool_choice
+        ?parallel_tool_calls
+        ?plugins
+        ?temperature
+        ?top_p
+        ?top_k
+        ?min_p
+        ?top_a
+        ?max_tokens
+        ?max_completion_tokens
+        ?seed
+        ?stop
+        ?frequency_penalty
+        ?presence_penalty
+        ?repetition_penalty
+        ?logit_bias
+        ?logprobs
+        ?top_logprobs
+        ?verbosity
+        ?response_format
+        ?structured_outputs
+        ?modalities
+        ?stream_options
+        ?service_tier
+        ?models
+        ?transforms
+        ?provider
+        ~model
+        ~messages
+        ()
+    : [ `Streaming ] t
+    =
+    create_body
+      ~stream:true
+      ?reasoning
+      ?tools
+      ?tool_choice
+      ?parallel_tool_calls
+      ?plugins
+      ?temperature
+      ?top_p
+      ?top_k
+      ?min_p
+      ?top_a
+      ?max_tokens
+      ?max_completion_tokens
+      ?seed
+      ?stop
+      ?frequency_penalty
+      ?presence_penalty
+      ?repetition_penalty
+      ?logit_bias
+      ?logprobs
+      ?top_logprobs
+      ?verbosity
+      ?response_format
+      ?structured_outputs
+      ?modalities
+      ?stream_options
+      ?service_tier
+      ?models
+      ?transforms
+      ?provider
+      ~model
+      ~messages
+      ()
+  ;;
 end
 
 (* Per-token logprobs returned in [choices[].logprobs] when [logprobs = true] is
@@ -740,8 +1239,17 @@ module Stream_chunk = struct
       ; native_finish_reason : string option
       ; index : int
       ; delta : Delta.t
+      ; error : Jsonaf.t option [@default None]
+        (* When the upstream provider fails after generation has begun, the
+           final chunk may carry [finish_reason = "error"] and an [error]
+           object. We keep this as raw JSON since OpenRouter doesn't document
+           a stable schema for it. *)
       }
     [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+
+    (** [true] when this chunk represents a mid-stream upstream failure (i.e.
+        [finish_reason = "error"]). *)
+    let is_error t = [%equal: string option] t.finish_reason (Some "error")
   end
 
   type t =
@@ -758,10 +1266,12 @@ module Stream_chunk = struct
   [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
 end
 
-let create ~api_key ?app_info ?on_response_body (request : Request.t) =
+let create ~api_key ?app_info ?on_response_body (request : [ `Non_streaming ] Request.t) =
   let headers = Http.make_headers ~api_key ?app_info () in
   let body =
-    [%jsonaf_of: Request.t] request |> Jsonaf.to_string |> Cohttp_async.Body.of_string
+    [%jsonaf_of: [ `Non_streaming ] Request.t] request
+    |> Jsonaf.to_string
+    |> Cohttp_async.Body.of_string
   in
   let%bind response, body = Cohttp_async.Client.post ~headers ~body endpoint_url in
   let%bind body_string = Cohttp_async.Body.to_string body in
@@ -822,10 +1332,13 @@ let lines_of_chunks (chunks : string Pipe.Reader.t) : string Pipe.Reader.t =
           | line -> Pipe.write writer line)))
 ;;
 
-let create_stream ~api_key ?app_info ?on_stream_chunk (request : Request.t) =
+let create_stream ~api_key ?app_info ?on_stream_chunk (request : [ `Streaming ] Request.t)
+  =
   let headers = Http.make_headers ~api_key ?app_info () in
   let body =
-    [%jsonaf_of: Request.t] request |> Jsonaf.to_string |> Cohttp_async.Body.of_string
+    [%jsonaf_of: [ `Streaming ] Request.t] request
+    |> Jsonaf.to_string
+    |> Cohttp_async.Body.of_string
   in
   let%bind response, body = Cohttp_async.Client.post ~headers ~body endpoint_url in
   match Http.is_success_status response with
@@ -907,434 +1420,20 @@ module For_testing = struct
   let stream_chunk_of_jsonaf = [%of_jsonaf: Stream_chunk.t]
 end
 
-let%expect_test "request" =
-  [%jsonaf_of: Request.t]
-    { model = "openai/gpt-4o"
-    ; messages = [ Request.Message.user "Hello, world!" ]
-    ; stream = false
-    ; reasoning = None
-    ; tools = []
-    ; tool_choice = None
-    ; parallel_tool_calls = None
-    ; plugins = []
-    ; temperature = None
-    ; top_p = None
-    ; top_k = None
-    ; min_p = None
-    ; top_a = None
-    ; max_tokens = None
-    ; max_completion_tokens = None
-    ; seed = None
-    ; stop = None
-    ; frequency_penalty = None
-    ; presence_penalty = None
-    ; repetition_penalty = None
-    ; logit_bias = None
-    ; logprobs = None
-    ; top_logprobs = None
-    ; verbosity = None
-    ; response_format = None
-    ; modalities = None
-    ; stream_options = None
-    ; service_tier = None
-    ; models = []
-    ; transforms = []
-    }
-  |> Jsonaf.to_string_hum
-  |> print_endline;
-  [%expect
-    {|
-    {
-      "model": "openai/gpt-4o",
-      "messages": [
-        {
-          "role": "user",
-          "content": "Hello, world!"
-        }
-      ],
-      "stream": false
-    }
-    |}];
+let%expect_test "Reasoning.create rejects effort + max_tokens together" =
+  Request.Reasoning.create ~effort:Low ~max_tokens:200 ()
+  |> [%sexp_of: Request.Reasoning.t Or_error.t]
+  |> print_s;
+  [%expect {| (Error "Reasoning: effort and max_tokens are mutually exclusive") |}];
   Deferred.unit
 ;;
 
-let%expect_test "request with tools" =
-  let search_tool =
-    Tool.create
-      ~name:"search_books"
-      ~description:"Search for books in a library"
-      ~parameters:
-        (`Object
-            [ "type", `String "object"
-            ; ( "properties"
-              , `Object
-                  [ ( "query"
-                    , `Object
-                        [ "type", `String "string"
-                        ; "description", `String "Search query"
-                        ] )
-                  ] )
-            ; "required", `Array [ `String "query" ]
-            ])
-      ()
-  in
-  [%jsonaf_of: Request.t]
-    { model = "google/gemini-2.0-flash-001"
-    ; messages = [ Request.Message.user "Find books about OCaml" ]
-    ; stream = false
-    ; reasoning = None
-    ; tools = [ search_tool ]
-    ; tool_choice = Some Tool_choice.auto
-    ; parallel_tool_calls = None
-    ; plugins = []
-    ; temperature = None
-    ; top_p = None
-    ; top_k = None
-    ; min_p = None
-    ; top_a = None
-    ; max_tokens = None
-    ; max_completion_tokens = None
-    ; seed = None
-    ; stop = None
-    ; frequency_penalty = None
-    ; presence_penalty = None
-    ; repetition_penalty = None
-    ; logit_bias = None
-    ; logprobs = None
-    ; top_logprobs = None
-    ; verbosity = None
-    ; response_format = None
-    ; modalities = None
-    ; stream_options = None
-    ; service_tier = None
-    ; models = []
-    ; transforms = []
-    }
-  |> Jsonaf.to_string_hum
-  |> print_endline;
-  [%expect
-    {|
-    {
-      "model": "google/gemini-2.0-flash-001",
-      "messages": [
-        {
-          "role": "user",
-          "content": "Find books about OCaml"
-        }
-      ],
-      "stream": false,
-      "tools": [
-        {
-          "type": "function",
-          "function": {
-            "name": "search_books",
-            "description": "Search for books in a library",
-            "parameters": {
-              "type": "object",
-              "properties": {
-                "query": {
-                  "type": "string",
-                  "description": "Search query"
-                }
-              },
-              "required": [
-                "query"
-              ]
-            }
-          }
-        }
-      ],
-      "tool_choice": "auto"
-    }
-    |}];
-  Deferred.unit
-;;
-
-let%expect_test "tool result message" =
-  [%jsonaf_of: Request.t]
-    { model = "openai/gpt-4o"
-    ; messages =
-        [ Request.Message.user "Find books about OCaml"
-        ; Request.Message.assistant
-            ~tool_calls:
-              [ { id = "call_abc123"
-                ; type_ = "function"
-                ; function_ =
-                    { name = "search_books"; arguments = {|{"query": "OCaml"}|} }
-                }
-              ]
-            ()
-        ; Request.Message.tool
-            ~tool_call_id:"call_abc123"
-            ~content:{|[{"title": "Real World OCaml", "author": "Yaron Minsky"}]|}
-        ]
-    ; stream = false
-    ; reasoning = None
-    ; tools = []
-    ; tool_choice = None
-    ; parallel_tool_calls = None
-    ; plugins = []
-    ; temperature = None
-    ; top_p = None
-    ; top_k = None
-    ; min_p = None
-    ; top_a = None
-    ; max_tokens = None
-    ; max_completion_tokens = None
-    ; seed = None
-    ; stop = None
-    ; frequency_penalty = None
-    ; presence_penalty = None
-    ; repetition_penalty = None
-    ; logit_bias = None
-    ; logprobs = None
-    ; top_logprobs = None
-    ; verbosity = None
-    ; response_format = None
-    ; modalities = None
-    ; stream_options = None
-    ; service_tier = None
-    ; models = []
-    ; transforms = []
-    }
-  |> Jsonaf.to_string_hum
-  |> print_endline;
-  [%expect
-    {|
-    {
-      "model": "openai/gpt-4o",
-      "messages": [
-        {
-          "role": "user",
-          "content": "Find books about OCaml"
-        },
-        {
-          "role": "assistant",
-          "tool_calls": [
-            {
-              "id": "call_abc123",
-              "type": "function",
-              "function": {
-                "name": "search_books",
-                "arguments": "{\"query\": \"OCaml\"}"
-              }
-            }
-          ]
-        },
-        {
-          "role": "tool",
-          "content": "[{\"title\": \"Real World OCaml\", \"author\": \"Yaron Minsky\"}]",
-          "tool_call_id": "call_abc123"
-        }
-      ],
-      "stream": false
-    }
-    |}];
-  Deferred.unit
-;;
-
-let%expect_test "request with web search plugin" =
-  [%jsonaf_of: Request.t]
-    { model = "openai/gpt-4o"
-    ; messages = [ Request.Message.user "What's happening in AI today?" ]
-    ; stream = true
-    ; reasoning = None
-    ; tools = []
-    ; tool_choice = None
-    ; parallel_tool_calls = None
-    ; plugins = [ Plugin.web () ]
-    ; temperature = None
-    ; top_p = None
-    ; top_k = None
-    ; min_p = None
-    ; top_a = None
-    ; max_tokens = None
-    ; max_completion_tokens = None
-    ; seed = None
-    ; stop = None
-    ; frequency_penalty = None
-    ; presence_penalty = None
-    ; repetition_penalty = None
-    ; logit_bias = None
-    ; logprobs = None
-    ; top_logprobs = None
-    ; verbosity = None
-    ; response_format = None
-    ; modalities = None
-    ; stream_options = None
-    ; service_tier = None
-    ; models = []
-    ; transforms = []
-    }
-  |> Jsonaf.to_string_hum
-  |> print_endline;
-  [%expect
-    {|
-    {
-      "model": "openai/gpt-4o",
-      "messages": [
-        {
-          "role": "user",
-          "content": "What's happening in AI today?"
-        }
-      ],
-      "stream": true,
-      "plugins": [
-        {
-          "id": "web"
-        }
-      ]
-    }
-    |}];
-  Deferred.unit
-;;
-
-let%expect_test "request with file attachment" =
-  [%jsonaf_of: Request.t]
-    { model = "anthropic/claude-sonnet-4"
-    ; messages =
-        [ Request.Message.user_multipart
-            [ Request.Message.Content_part.text
-                "What are the main points in this document?"
-            ; Request.Message.Content_part.file
-                ~filename:"document.pdf"
-                ~file_data:"https://bitcoin.org/bitcoin.pdf"
-            ]
-        ]
-    ; stream = false
-    ; reasoning = None
-    ; tools = []
-    ; tool_choice = None
-    ; parallel_tool_calls = None
-    ; plugins = []
-    ; temperature = None
-    ; top_p = None
-    ; top_k = None
-    ; min_p = None
-    ; top_a = None
-    ; max_tokens = None
-    ; max_completion_tokens = None
-    ; seed = None
-    ; stop = None
-    ; frequency_penalty = None
-    ; presence_penalty = None
-    ; repetition_penalty = None
-    ; logit_bias = None
-    ; logprobs = None
-    ; top_logprobs = None
-    ; verbosity = None
-    ; response_format = None
-    ; modalities = None
-    ; stream_options = None
-    ; service_tier = None
-    ; models = []
-    ; transforms = []
-    }
-  |> Jsonaf.to_string_hum
-  |> print_endline;
-  [%expect
-    {|
-    {
-      "model": "anthropic/claude-sonnet-4",
-      "messages": [
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "text",
-              "text": "What are the main points in this document?"
-            },
-            {
-              "type": "file",
-              "file": {
-                "filename": "document.pdf",
-                "file_data": "https://bitcoin.org/bitcoin.pdf"
-              }
-            }
-          ]
-        }
-      ],
-      "stream": false
-    }
-    |}];
-  Deferred.unit
-;;
-
-let%expect_test "request with file-parser plugin" =
-  [%jsonaf_of: Request.t]
-    { model = "anthropic/claude-sonnet-4"
-    ; messages =
-        [ Request.Message.user_multipart
-            [ Request.Message.Content_part.text "Summarize this PDF"
-            ; Request.Message.Content_part.file
-                ~filename:"document.pdf"
-                ~file_data:"data:application/pdf;base64,JVBERi0xLjQ..."
-            ]
-        ]
-    ; stream = false
-    ; reasoning = None
-    ; tools = []
-    ; tool_choice = None
-    ; parallel_tool_calls = None
-    ; plugins = [ Plugin.file_parser ~pdf_engine:Mistral_ocr () ]
-    ; temperature = None
-    ; top_p = None
-    ; top_k = None
-    ; min_p = None
-    ; top_a = None
-    ; max_tokens = None
-    ; max_completion_tokens = None
-    ; seed = None
-    ; stop = None
-    ; frequency_penalty = None
-    ; presence_penalty = None
-    ; repetition_penalty = None
-    ; logit_bias = None
-    ; logprobs = None
-    ; top_logprobs = None
-    ; verbosity = None
-    ; response_format = None
-    ; modalities = None
-    ; stream_options = None
-    ; service_tier = None
-    ; models = []
-    ; transforms = []
-    }
-  |> Jsonaf.to_string_hum
-  |> print_endline;
-  [%expect
-    {|
-    {
-      "model": "anthropic/claude-sonnet-4",
-      "messages": [
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "text",
-              "text": "Summarize this PDF"
-            },
-            {
-              "type": "file",
-              "file": {
-                "filename": "document.pdf",
-                "file_data": "data:application/pdf;base64,JVBERi0xLjQ..."
-              }
-            }
-          ]
-        }
-      ],
-      "stream": false,
-      "plugins": [
-        {
-          "id": "file-parser",
-          "pdf": {
-            "engine": "mistral-ocr"
-          }
-        }
-      ]
-    }
-    |}];
+let%expect_test "Provider.is_empty: empty <-> non-empty" =
+  let open Request.Provider in
+  print_s [%sexp (is_empty empty : bool)];
+  [%expect {| true |}];
+  print_s [%sexp (is_empty { empty with sort = Some Sort.Price } : bool)];
+  [%expect {| false |}];
   Deferred.unit
 ;;
 

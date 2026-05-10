@@ -10,6 +10,14 @@ let mime_type_of_extension ext =
   | ".jpg" | ".jpeg" -> Some "image/jpeg"
   | ".gif" -> Some "image/gif"
   | ".webp" -> Some "image/webp"
+  | ".mp3" -> Some "audio/mpeg"
+  | ".wav" -> Some "audio/wav"
+  | ".ogg" -> Some "audio/ogg"
+  | ".flac" -> Some "audio/flac"
+  | ".m4a" -> Some "audio/mp4"
+  | ".mp4" -> Some "video/mp4"
+  | ".mov" -> Some "video/quicktime"
+  | ".webm" -> Some "video/webm"
   | _ -> None
 ;;
 
@@ -59,6 +67,20 @@ let chat_command =
      and reasoning_exclude =
        flag "reasoning-exclude" no_arg ~doc:" hide reasoning from response output"
      and web_search = flag "web-search" no_arg ~doc:" enable web search plugin"
+     and response_healing =
+       flag "response-healing" no_arg ~doc:" enable response-healing plugin"
+     and context_compression =
+       flag "context-compression" no_arg ~doc:" enable context-compression plugin"
+     and server_web_search =
+       flag
+         "server-web-search"
+         no_arg
+         ~doc:
+           " enable server-side openrouter:web_search tool (model decides when to call)"
+     and server_web_fetch =
+       flag "server-web-fetch" no_arg ~doc:" enable server-side openrouter:web_fetch tool"
+     and server_datetime =
+       flag "server-datetime" no_arg ~doc:" enable server-side openrouter:datetime tool"
      and files = flag "file" (listed string) ~doc:"PATH attach a file (PDF or image)"
      and temperature =
        flag "temperature" (optional float) ~doc:"FLOAT sampling temperature"
@@ -94,6 +116,19 @@ let chat_command =
          "modality"
          (listed string)
          ~doc:"NAME enable response modality (e.g. text, image; may be repeated)"
+     and structured_outputs =
+       flag
+         "structured-outputs"
+         no_arg
+         ~doc:
+           " set structured_outputs=true (strict-mode flag complementary to -json-schema)"
+     and cache_system_prompt =
+       flag
+         "cache-system-prompt"
+         (optional string)
+         ~doc:
+           "TEXT prepend a cached system-prompt content part with cache_control = \
+            ephemeral (Anthropic-style prompt caching)"
      and include_usage =
        flag "stream-usage" no_arg ~doc:" include final usage chunk in streaming responses"
      and service_tier =
@@ -111,6 +146,43 @@ let chat_command =
          "transform"
          (listed string)
          ~doc:"NAME message transform (e.g. middle-out; may be repeated)"
+     and provider_only =
+       flag
+         "provider-only"
+         (listed string)
+         ~doc:"NAME restrict routing to this provider (may be repeated)"
+     and provider_ignore =
+       flag
+         "provider-ignore"
+         (listed string)
+         ~doc:"NAME exclude this provider from routing (may be repeated)"
+     and provider_order =
+       flag
+         "provider-order"
+         (listed string)
+         ~doc:"NAME try providers in this order (may be repeated)"
+     and provider_sort =
+       flag
+         "provider-sort"
+         (optional string)
+         ~doc:"SORT route preference (price|throughput|latency)"
+     and provider_data_collection =
+       flag
+         "provider-data-collection"
+         (optional string)
+         ~doc:"MODE allow|deny — restrict providers by data-collection policy"
+     and provider_zdr =
+       flag "provider-zdr" no_arg ~doc:" restrict to Zero Data Retention endpoints"
+     and provider_allow_fallbacks =
+       flag
+         "provider-no-fallbacks"
+         no_arg
+         ~doc:" disable provider fallbacks (sets allow_fallbacks=false)"
+     and provider_require_parameters =
+       flag
+         "provider-require-parameters"
+         no_arg
+         ~doc:" require providers that support all request parameters"
      and json =
        flag "json" no_arg ~doc:" force JSON object output (response_format=json_object)"
      and json_schema_file =
@@ -189,10 +261,8 @@ let chat_command =
          Deferred.return
            (match reasoning_tokens, reasoning_effort, reasoning_exclude with
             | None, None, false -> Ok None
-            | Some _, Some _, _ ->
-              Or_error.error_string "cannot pass both -reasoning and -reasoning-effort"
             | max_tokens, effort, exclude ->
-              let%map.Or_error effort =
+              let%bind.Or_error effort =
                 match effort with
                 | None -> Ok None
                 | Some s ->
@@ -202,12 +272,11 @@ let chat_command =
                     s
                   |> Or_error.map ~f:Option.some
               in
-              Some
-                { Completions.Request.Reasoning.effort
-                ; max_tokens
-                ; exclude = (if exclude then Some true else None)
-                ; enabled = None
-                })
+              let exclude = if exclude then Some true else None in
+              let%map.Or_error reasoning =
+                Completions.Request.Reasoning.create ?effort ?max_tokens ?exclude ()
+              in
+              Some reasoning)
        in
        let%bind.Deferred.Or_error verbosity =
          Deferred.return
@@ -220,15 +289,87 @@ let chat_command =
                 s
               |> Or_error.map ~f:Option.some)
        in
+       let%bind.Deferred.Or_error provider =
+         Deferred.return
+           (let%bind.Or_error sort =
+              match provider_sort with
+              | None -> Ok None
+              | Some s ->
+                parse_string_variant
+                  Completions.Request.Provider.Sort.of_string
+                  ~flag:"-provider-sort"
+                  s
+                |> Or_error.map ~f:Option.some
+            in
+            let%map.Or_error data_collection =
+              match provider_data_collection with
+              | None -> Ok None
+              | Some s ->
+                parse_string_variant
+                  Completions.Request.Provider.Data_collection.of_string
+                  ~flag:"-provider-data-collection"
+                  s
+                |> Or_error.map ~f:Option.some
+            in
+            let list_or_none = function
+              | [] -> None
+              | xs -> Some xs
+            in
+            let provider =
+              { Completions.Request.Provider.empty with
+                order = list_or_none provider_order
+              ; allow_fallbacks =
+                  (match provider_allow_fallbacks with
+                   | true -> Some false
+                   | false -> None)
+              ; require_parameters =
+                  (match provider_require_parameters with
+                   | true -> Some true
+                   | false -> None)
+              ; data_collection
+              ; zdr =
+                  (match provider_zdr with
+                   | true -> Some true
+                   | false -> None)
+              ; only = list_or_none provider_only
+              ; ignore = list_or_none provider_ignore
+              ; sort
+              }
+            in
+            match Completions.Request.Provider.is_empty provider with
+            | true -> None
+            | false -> Some provider)
+       in
        let stream_options =
          match include_usage with
          | true -> Some { Completions.Request.Stream_options.include_usage = Some true }
          | false -> None
        in
        let plugins =
-         match web_search with
-         | true -> [ Completions.Plugin.web () ]
-         | false -> []
+         List.filter_opt
+           [ (match web_search with
+              | true -> Some (Completions.Plugin.web ())
+              | false -> None)
+           ; (match response_healing with
+              | true -> Some Completions.Plugin.response_healing
+              | false -> None)
+           ; (match context_compression with
+              | true -> Some Completions.Plugin.context_compression
+              | false -> None)
+           ]
+       in
+       let server_tools =
+         List.filter_opt
+           [ (match server_web_search with
+              | true -> Some (Completions.Tool.web_search ())
+              | false -> None)
+           ; (match server_web_fetch with
+              | true -> Some (Completions.Tool.web_fetch ())
+              | false -> None)
+           ; (match server_datetime with
+              | true -> Some Completions.Tool.datetime
+              | false -> None)
+           ]
        in
        let app_info =
          Http.App_info.create
@@ -238,11 +379,19 @@ let chat_command =
            ~experimental_metadata:app_experimental_metadata
            ()
        in
-       (* Build message - use multipart if files are attached *)
+       (* Build message - use multipart if files are attached or a cached
+          system prompt is supplied. *)
+       let cache_system_part =
+         Option.map cache_system_prompt ~f:(fun text ->
+           Completions.Request.Message.Content_part.text
+             ~cache_control:
+               (Completions.Request.Message.Content_part.Cache_control.ephemeral ())
+             text)
+       in
        let%bind.Deferred.Or_error user_message =
-         match files with
-         | [] -> Deferred.Or_error.return (Completions.Request.Message.user message)
-         | _ ->
+         match files, cache_system_part with
+         | [], None -> Deferred.Or_error.return (Completions.Request.Message.user message)
+         | files, cache_system_part ->
            (* Read all files and build content parts *)
            let%bind.Deferred.Or_error file_parts =
              Deferred.Or_error.List.map files ~how:`Sequential ~f:(fun path ->
@@ -250,64 +399,92 @@ let chat_command =
                  read_file_as_data_url path
                in
                let filename = Filename.basename path in
-               (* Use file content part for PDFs, image for images *)
-               if String.is_prefix mime_type ~prefix:"image/"
-               then (
-                 (* Extract base64 data from data URL for images *)
-                 let data =
-                   String.chop_prefix_exn
-                     data_url
-                     ~prefix:(sprintf "data:%s;base64," mime_type)
-                 in
+               let base64_data () =
+                 String.chop_prefix_exn
+                   data_url
+                   ~prefix:(sprintf "data:%s;base64," mime_type)
+               in
+               match String.lsplit2 mime_type ~on:'/' with
+               | Some ("image", _) ->
                  Deferred.Or_error.return
                    (Completions.Request.Message.Content_part.image_base64
                       ~mime_type
-                      ~data))
-               else
+                      ~data:(base64_data ())
+                      ())
+               | Some ("audio", subtype) ->
+                 (* OpenRouter expects [format] like "wav"/"mp3"/"flac"; mp4 ↔ m4a. *)
+                 let format =
+                   match subtype with
+                   | "mpeg" -> "mp3"
+                   | "mp4" -> "m4a"
+                   | s -> s
+                 in
+                 Deferred.Or_error.return
+                   (Completions.Request.Message.Content_part.audio
+                      ~format
+                      ~data:(base64_data ())
+                      ())
+               | Some ("video", _) ->
+                 Deferred.Or_error.return
+                   (Completions.Request.Message.Content_part.video_base64
+                      ~mime_type
+                      ~data:(base64_data ())
+                      ())
+               | _ ->
                  Deferred.Or_error.return
                    (Completions.Request.Message.Content_part.file
                       ~filename
-                      ~file_data:data_url))
+                      ~file_data:data_url
+                      ()))
            in
            let text_part = Completions.Request.Message.Content_part.text message in
-           let all_parts = text_part :: file_parts in
+           let all_parts = Option.to_list cache_system_part @ (text_part :: file_parts) in
            Deferred.Or_error.return (Completions.Request.Message.user_multipart all_parts)
        in
-       let request : Completions.Request.t =
-         { model
-         ; messages = [ user_message ]
-         ; stream
-         ; reasoning
-         ; tools = []
-         ; tool_choice = None
-         ; parallel_tool_calls = None
-         ; plugins
-         ; temperature
-         ; top_p
-         ; top_k
-         ; min_p
-         ; top_a
-         ; max_tokens
-         ; max_completion_tokens
-         ; seed
-         ; stop = (if List.is_empty stop then None else Some stop)
-         ; frequency_penalty
-         ; presence_penalty
-         ; repetition_penalty
-         ; logit_bias = None
-         ; logprobs = (if logprobs then Some true else None)
-         ; top_logprobs
-         ; verbosity
-         ; response_format
-         ; modalities = (if List.is_empty modalities then None else Some modalities)
-         ; stream_options
-         ; service_tier
-         ; models = fallback_models
-         ; transforms
-         }
+       let list_or_none = function
+         | [] -> None
+         | xs -> Some xs
        in
+       let bool_flag b = if b then Some true else None in
+       (* Bundle the args that don't depend on the streaming variant. *)
+       let stop = list_or_none stop in
+       let logprobs = bool_flag logprobs in
+       let structured_outputs = bool_flag structured_outputs in
+       let modalities = list_or_none modalities in
        match stream with
        | true ->
+         let request =
+           Completions.Request.create_streaming
+             ~model
+             ~messages:[ user_message ]
+             ?reasoning
+             ~tools:server_tools
+             ~plugins
+             ?temperature
+             ?top_p
+             ?top_k
+             ?min_p
+             ?top_a
+             ?max_tokens
+             ?max_completion_tokens
+             ?seed
+             ?stop
+             ?frequency_penalty
+             ?presence_penalty
+             ?repetition_penalty
+             ?logprobs
+             ?top_logprobs
+             ?verbosity
+             ?response_format
+             ?structured_outputs
+             ?modalities
+             ?stream_options
+             ?service_tier
+             ~models:fallback_models
+             ~transforms
+             ?provider
+             ()
+         in
          let%bind log_writer =
            match log_stream_to with
            | None -> return None
@@ -361,6 +538,38 @@ let chat_command =
          print_endline "";
          Deferred.Or_error.return ()
        | false ->
+         let request =
+           Completions.Request.create
+             ~model
+             ~messages:[ user_message ]
+             ?reasoning
+             ~tools:server_tools
+             ~plugins
+             ?temperature
+             ?top_p
+             ?top_k
+             ?min_p
+             ?top_a
+             ?max_tokens
+             ?max_completion_tokens
+             ?seed
+             ?stop
+             ?frequency_penalty
+             ?presence_penalty
+             ?repetition_penalty
+             ?logprobs
+             ?top_logprobs
+             ?verbosity
+             ?response_format
+             ?structured_outputs
+             ?modalities
+             ?stream_options
+             ?service_tier
+             ~models:fallback_models
+             ~transforms
+             ?provider
+             ()
+         in
          let on_response_body =
            Option.map log_response_to ~f:(fun path body ->
              Writer.save path ~contents:body)
