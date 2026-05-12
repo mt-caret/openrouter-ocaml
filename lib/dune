@@ -1,7 +1,13 @@
 (library
  (public_name openrouter_api)
  (name openrouter_api)
- (libraries async cohttp-async async_ssl core jsonaf)
+ (libraries
+  async
+  cohttp-async
+  async_ssl
+  core
+  jsonaf
+  ppx_typed_fields.typed_variants_lib)
  (inline_tests)
  (preprocess
-  (pps ppx_jane ppx_jsonaf_conv)))
+  (pps ppx_jane ppx_jsonaf_conv ppx_typed_fields)))

@@ -53,7 +53,7 @@ Request fields covered:
   `Tool.web_search`, etc.
 - **Tool choice**: `Auto | None_ | Required | Specific` (encodes as bare
   string or object — handled manually since it doesn't fit the
-  `Tagged_union` pattern).
+  `Json_helper.Make_tagged_union` pattern).
 - **Plugins**: `Plugin.t` variants — `Web | File_parser | Response_healing |
   Context_compression`.
 - **Routing**: `models` (fallback list), `transforms`, `Provider.t` typed
@@ -147,7 +147,7 @@ their respective behaviours.
 
 ## Internal abstractions
 
-- `String_variant.Make (T)` — derives `Stringable.S` and
+- `Json_helper.Make_string_variant (T)` — derives `Stringable.S` and
   `Jsonaf.Jsonafable.S` for nullary variants whose JSON wire form is a
   bare string. Used by `Reasoning.Effort`, `Verbosity`, `Pdf_engine`,
   `Provider.Sort`, `Provider.Data_collection`. Recovers the constructor name
@@ -155,10 +155,12 @@ their respective behaviours.
   `lowercase + tr '_' '-' + rstrip '-'` (handles `None_` → `none`,
   `Pdf_text` → `pdf-text`).
 
-- `Tagged_union.{to,of}_jsonaf` — for objects with a single tag field
-  (`"type"` or `"id"`) selecting how the rest is parsed. Centralises error
-  reporting and supports tag-only / inlined / nested encodings. Used by
-  `Tool`, `Plugin`, `Content_part`, `Response_format`.
+- `Json_helper.Make_tagged_union (T)` — derives `Jsonaf.Jsonafable.S` for
+  objects with a single tag field (`"type"` or `"id"`) selecting how the
+  rest is parsed. Per-variant `codec` says whether the payload is absent,
+  spread inline, or nested under a sub-key (`Json_helper.nested`); the wire
+  tag comes from `Typed_variant.name` by default (or kebab-case / a custom
+  function). Used by `Tool`, `Plugin`, `Content_part`, `Response_format`.
 
 ## Recently-completed work
 

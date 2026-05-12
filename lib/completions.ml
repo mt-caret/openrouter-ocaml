@@ -97,45 +97,41 @@ module Tool = struct
     [@@deriving equal, jsonaf, sexp_of]
   end
 
-  type t =
-    | Function of Function.t
-    | Web_search of Web_search.t
-    | Web_fetch of Web_fetch.t
-    | Datetime
-    | Image_generation of Image_generation.t
-  [@@deriving equal, sexp_of]
+  module T = struct
+    type t =
+      | Function of Function.t
+      | Web_search of Web_search.t
+      | Web_fetch of Web_fetch.t
+      | Datetime
+      | Image_generation of Image_generation.t
+    [@@deriving equal, sexp_of, typed_variants]
 
-  let to_jsonaf = Tagged_union.to_jsonaf ~discriminator:"type"
+    let discriminator = "type"
 
-  let jsonaf_of_t = function
-    | Function f ->
-      to_jsonaf ~tag:"function" ~extra_fields:[ "function", Function.jsonaf_of_t f ] ()
-    | Web_search cfg ->
-      to_jsonaf ~tag:"openrouter:web_search" ~inline:(Web_search.jsonaf_of_t cfg) ()
-    | Web_fetch cfg ->
-      to_jsonaf ~tag:"openrouter:web_fetch" ~inline:(Web_fetch.jsonaf_of_t cfg) ()
-    | Datetime -> to_jsonaf ~tag:"openrouter:datetime" ()
-    | Image_generation cfg ->
-      to_jsonaf
-        ~tag:"openrouter:image_generation"
-        ~inline:(Image_generation.jsonaf_of_t cfg)
-        ()
-  ;;
+    (* The "function" tool is the OpenAI standard; everything else is an
+       OpenRouter server-tool, namespaced under [openrouter:]. *)
+    let tag =
+      `Custom
+        (fun { Typed_variant.Packed.f = T v } ->
+          match v with
+          | Function -> "function"
+          | Web_search | Web_fetch | Datetime | Image_generation ->
+            "openrouter:" ^ Typed_variant.name v)
+    ;;
 
-  let t_of_jsonaf =
-    Tagged_union.of_jsonaf ~discriminator:"type" ~handle_tag:(fun tag json ->
-      match tag with
-      | "function" ->
-        (match Jsonaf.member "function" json with
-         | Some f -> Function (Function.t_of_jsonaf f)
-         | None -> Jsonaf_kernel.Conv.of_jsonaf_error "Missing 'function' field" json)
-      | "openrouter:web_search" -> Web_search (Web_search.t_of_jsonaf json)
-      | "openrouter:web_fetch" -> Web_fetch (Web_fetch.t_of_jsonaf json)
-      | "openrouter:datetime" -> Datetime
-      | "openrouter:image_generation" ->
-        Image_generation (Image_generation.t_of_jsonaf json)
-      | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Unknown tool type" json)
-  ;;
+    let codec : type a. a Typed_variant.t -> a Json_helper.Tagged_union_codec.t = function
+      | Function ->
+        Json_helper.nested ~key:"function" Function.jsonaf_of_t Function.t_of_jsonaf
+      | Web_search -> Inline (Web_search.jsonaf_of_t, Web_search.t_of_jsonaf)
+      | Web_fetch -> Inline (Web_fetch.jsonaf_of_t, Web_fetch.t_of_jsonaf)
+      | Datetime -> Tag_only
+      | Image_generation ->
+        Inline (Image_generation.jsonaf_of_t, Image_generation.t_of_jsonaf)
+    ;;
+  end
+
+  include T
+  include Json_helper.Make_tagged_union (T)
 
   let function_ ~name ?description ?parameters () =
     Function { name; description; parameters }
@@ -216,13 +212,10 @@ end
 module Plugin = struct
   module Web = struct
     type t =
-      { id : string
-      ; enabled : bool option [@jsonaf.option]
+      { enabled : bool option [@jsonaf.option]
       ; max_results : int option [@jsonaf.option]
       }
     [@@deriving equal, jsonaf, sexp_of]
-
-    let default = { id = "web"; enabled = None; max_results = None }
   end
 
   module Pdf_engine = struct
@@ -235,7 +228,7 @@ module Plugin = struct
     end
 
     include T
-    include String_variant.Make (T)
+    include Json_helper.Make_string_variant (T)
   end
 
   module File_parser = struct
@@ -243,63 +236,43 @@ module Plugin = struct
       type t = { engine : Pdf_engine.t } [@@deriving equal, jsonaf, sexp_of]
     end
 
-    type t =
-      { id : string
-      ; pdf : Pdf_config.t option [@jsonaf.option]
-      }
+    type t = { pdf : Pdf_config.t option [@jsonaf.option] }
     [@@deriving equal, jsonaf, sexp_of]
-
-    let default = { id = "file-parser"; pdf = None }
   end
 
-  module Response_healing = struct
-    type t = { id : string } [@@deriving equal, jsonaf, sexp_of]
+  module T = struct
+    type t =
+      | Web of Web.t
+      | File_parser of File_parser.t
+      | Response_healing
+      | Context_compression
+    [@@deriving equal, sexp_of, typed_variants]
 
-    let default = { id = "response-healing" }
+    let discriminator = "id"
+    let tag = `Kebab_case
+
+    let codec : type a. a Typed_variant.t -> a Json_helper.Tagged_union_codec.t = function
+      | Web -> Inline (Web.jsonaf_of_t, Web.t_of_jsonaf)
+      | File_parser -> Inline (File_parser.jsonaf_of_t, File_parser.t_of_jsonaf)
+      | Response_healing -> Tag_only
+      | Context_compression -> Tag_only
+    ;;
   end
 
-  module Context_compression = struct
-    type t = { id : string } [@@deriving equal, jsonaf, sexp_of]
+  include T
+  include Json_helper.Make_tagged_union (T)
 
-    let default = { id = "context-compression" }
-  end
-
-  type t =
-    | Web of Web.t
-    | File_parser of File_parser.t
-    | Response_healing of Response_healing.t
-    | Context_compression of Context_compression.t
-  [@@deriving equal, sexp_of]
-
-  let jsonaf_of_t = function
-    | Web w -> Web.jsonaf_of_t w
-    | File_parser f -> File_parser.jsonaf_of_t f
-    | Response_healing r -> Response_healing.jsonaf_of_t r
-    | Context_compression c -> Context_compression.jsonaf_of_t c
-  ;;
-
-  let t_of_jsonaf =
-    Tagged_union.of_jsonaf ~discriminator:"id" ~handle_tag:(fun tag json ->
-      match tag with
-      | "web" -> Web (Web.t_of_jsonaf json)
-      | "file-parser" -> File_parser (File_parser.t_of_jsonaf json)
-      | "response-healing" -> Response_healing (Response_healing.t_of_jsonaf json)
-      | "context-compression" ->
-        Context_compression (Context_compression.t_of_jsonaf json)
-      | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Unknown plugin id" json)
-  ;;
-
-  let web ?enabled ?max_results () = Web { id = "web"; enabled; max_results }
+  let web ?enabled ?max_results () = Web { enabled; max_results }
 
   let file_parser ?pdf_engine () =
     let pdf =
       Option.map pdf_engine ~f:(fun engine -> { File_parser.Pdf_config.engine })
     in
-    File_parser { id = "file-parser"; pdf }
+    File_parser { pdf }
   ;;
 
-  let response_healing = Response_healing Response_healing.default
-  let context_compression = Context_compression Context_compression.default
+  let response_healing = Response_healing
+  let context_compression = Context_compression
 end
 
 module Citation = struct
@@ -376,30 +349,6 @@ module Request = struct
     end
 
     module Content_part = struct
-      module Image_url = struct
-        type t = { url : string } [@@deriving equal, jsonaf, sexp_of]
-      end
-
-      module File_data = struct
-        type t =
-          { filename : string
-          ; file_data : string
-          }
-        [@@deriving equal, jsonaf, sexp_of]
-      end
-
-      module Input_audio = struct
-        type t =
-          { data : string (** Base64-encoded audio bytes (no [data:] prefix). *)
-          ; format : string (** e.g. "wav", "mp3", "aiff", "aac", "ogg", "flac". *)
-          }
-        [@@deriving equal, jsonaf, sexp_of]
-      end
-
-      module Video_url = struct
-        type t = { url : string } [@@deriving equal, jsonaf, sexp_of]
-      end
-
       module Cache_control = struct
         type t =
           { type_ : string [@key "type"]
@@ -410,28 +359,94 @@ module Request = struct
         let ephemeral ?ttl () = { type_ = "ephemeral"; ttl }
       end
 
-      type t =
-        | Text of
-            { text : string
-            ; cache_control : Cache_control.t option
+      module Text = struct
+        type t =
+          { text : string
+          ; cache_control : Cache_control.t option [@jsonaf.option]
+          }
+        [@@deriving equal, jsonaf, sexp_of]
+      end
+
+      module Image_url = struct
+        module Url = struct
+          type t = { url : string } [@@deriving equal, jsonaf, sexp_of]
+        end
+
+        type t =
+          { image_url : Url.t
+          ; cache_control : Cache_control.t option [@jsonaf.option]
+          }
+        [@@deriving equal, jsonaf, sexp_of]
+      end
+
+      module File = struct
+        module Data = struct
+          type t =
+            { filename : string
+            ; file_data : string
             }
-        | Image_url of
-            { image_url : Image_url.t
-            ; cache_control : Cache_control.t option
+          [@@deriving equal, jsonaf, sexp_of]
+        end
+
+        type t =
+          { file : Data.t
+          ; cache_control : Cache_control.t option [@jsonaf.option]
+          }
+        [@@deriving equal, jsonaf, sexp_of]
+      end
+
+      module Input_audio = struct
+        module Data = struct
+          type t =
+            { data : string (** Base64-encoded audio bytes (no [data:] prefix). *)
+            ; format : string (** e.g. "wav", "mp3", "aiff", "aac", "ogg", "flac". *)
             }
-        | File of
-            { file : File_data.t
-            ; cache_control : Cache_control.t option
-            }
-        | Input_audio of
-            { input_audio : Input_audio.t
-            ; cache_control : Cache_control.t option
-            }
-        | Video_url of
-            { video_url : Video_url.t
-            ; cache_control : Cache_control.t option
-            }
-      [@@deriving equal, sexp_of]
+          [@@deriving equal, jsonaf, sexp_of]
+        end
+
+        type t =
+          { input_audio : Data.t
+          ; cache_control : Cache_control.t option [@jsonaf.option]
+          }
+        [@@deriving equal, jsonaf, sexp_of]
+      end
+
+      module Video_url = struct
+        module Url = struct
+          type t = { url : string } [@@deriving equal, jsonaf, sexp_of]
+        end
+
+        type t =
+          { video_url : Url.t
+          ; cache_control : Cache_control.t option [@jsonaf.option]
+          }
+        [@@deriving equal, jsonaf, sexp_of]
+      end
+
+      module T = struct
+        type t =
+          | Text of Text.t
+          | Image_url of Image_url.t
+          | File of File.t
+          | Input_audio of Input_audio.t
+          | Video_url of Video_url.t
+        [@@deriving equal, sexp_of, typed_variants]
+
+        let discriminator = "type"
+        let tag = `Infer
+
+        let codec : type a. a Typed_variant.t -> a Json_helper.Tagged_union_codec.t =
+          function
+          | Text -> Inline (Text.jsonaf_of_t, Text.t_of_jsonaf)
+          | Image_url -> Inline (Image_url.jsonaf_of_t, Image_url.t_of_jsonaf)
+          | File -> Inline (File.jsonaf_of_t, File.t_of_jsonaf)
+          | Input_audio -> Inline (Input_audio.jsonaf_of_t, Input_audio.t_of_jsonaf)
+          | Video_url -> Inline (Video_url.jsonaf_of_t, Video_url.t_of_jsonaf)
+        ;;
+      end
+
+      include T
+      include Json_helper.Make_tagged_union (T)
 
       let text ?cache_control s = Text { text = s; cache_control }
 
@@ -455,76 +470,6 @@ module Request = struct
       let video_base64 ?cache_control ~mime_type ~data () =
         let url = sprintf "data:%s;base64,%s" mime_type data in
         Video_url { video_url = { url }; cache_control }
-      ;;
-
-      let to_jsonaf ~tag ~extra_fields cache_control =
-        let extra_fields =
-          match cache_control with
-          | None -> extra_fields
-          | Some cc -> extra_fields @ [ "cache_control", Cache_control.jsonaf_of_t cc ]
-        in
-        Tagged_union.to_jsonaf ~discriminator:"type" ~tag ~extra_fields ()
-      ;;
-
-      let jsonaf_of_t = function
-        | Text { text; cache_control } ->
-          to_jsonaf ~tag:"text" ~extra_fields:[ "text", `String text ] cache_control
-        | Image_url { image_url; cache_control } ->
-          to_jsonaf
-            ~tag:"image_url"
-            ~extra_fields:[ "image_url", Image_url.jsonaf_of_t image_url ]
-            cache_control
-        | File { file; cache_control } ->
-          to_jsonaf
-            ~tag:"file"
-            ~extra_fields:[ "file", File_data.jsonaf_of_t file ]
-            cache_control
-        | Input_audio { input_audio; cache_control } ->
-          to_jsonaf
-            ~tag:"input_audio"
-            ~extra_fields:[ "input_audio", Input_audio.jsonaf_of_t input_audio ]
-            cache_control
-        | Video_url { video_url; cache_control } ->
-          to_jsonaf
-            ~tag:"video_url"
-            ~extra_fields:[ "video_url", Video_url.jsonaf_of_t video_url ]
-            cache_control
-      ;;
-
-      let t_of_jsonaf json =
-        let cache_control =
-          Option.map (Jsonaf.member "cache_control" json) ~f:Cache_control.t_of_jsonaf
-        in
-        let require_member key =
-          match Jsonaf.member key json with
-          | Some j -> j
-          | None ->
-            Jsonaf_kernel.Conv.of_jsonaf_error [%string "Expected '%{key}' field"] json
-        in
-        Tagged_union.of_jsonaf ~discriminator:"type" json ~handle_tag:(fun tag _ ->
-          match tag with
-          | "text" ->
-            (match require_member "text" with
-             | `String text -> Text { text; cache_control }
-             | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Expected string 'text'" json)
-          | "image_url" ->
-            Image_url
-              { image_url = Image_url.t_of_jsonaf (require_member "image_url")
-              ; cache_control
-              }
-          | "file" ->
-            File { file = File_data.t_of_jsonaf (require_member "file"); cache_control }
-          | "input_audio" ->
-            Input_audio
-              { input_audio = Input_audio.t_of_jsonaf (require_member "input_audio")
-              ; cache_control
-              }
-          | "video_url" ->
-            Video_url
-              { video_url = Video_url.t_of_jsonaf (require_member "video_url")
-              ; cache_control
-              }
-          | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Unknown content part type" json)
       ;;
     end
 
@@ -619,7 +564,7 @@ module Request = struct
       end
 
       include T
-      include String_variant.Make (T)
+      include Json_helper.Make_string_variant (T)
     end
 
     type t =
@@ -653,7 +598,7 @@ module Request = struct
     end
 
     include T
-    include String_variant.Make (T)
+    include Json_helper.Make_string_variant (T)
   end
 
   module Stream_options = struct
@@ -671,7 +616,7 @@ module Request = struct
       end
 
       include T
-      include String_variant.Make (T)
+      include Json_helper.Make_string_variant (T)
     end
 
     module Data_collection = struct
@@ -683,7 +628,7 @@ module Request = struct
       end
 
       include T
-      include String_variant.Make (T)
+      include Json_helper.Make_string_variant (T)
     end
 
     module Max_price = struct
@@ -762,35 +707,31 @@ module Request = struct
       [@@deriving jsonaf, sexp_of]
     end
 
-    type t =
-      | Json_object
-      | Json_schema of Json_schema.t
-    [@@deriving sexp_of]
+    module T = struct
+      type t =
+        | Json_object
+        | Json_schema of Json_schema.t
+      [@@deriving sexp_of, typed_variants]
+
+      let discriminator = "type"
+      let tag = `Infer
+
+      let codec : type a. a Typed_variant.t -> a Json_helper.Tagged_union_codec.t =
+        function
+        | Json_object -> Tag_only
+        | Json_schema ->
+          Json_helper.nested
+            ~key:"json_schema"
+            Json_schema.jsonaf_of_t
+            Json_schema.t_of_jsonaf
+      ;;
+    end
+
+    include T
+    include Json_helper.Make_tagged_union (T)
 
     let json_schema ?strict ?schema ?description ~name () =
       Json_schema { Json_schema.name; strict; schema; description }
-    ;;
-
-    let to_jsonaf = Tagged_union.to_jsonaf ~discriminator:"type"
-
-    let jsonaf_of_t = function
-      | Json_object -> to_jsonaf ~tag:"json_object" ()
-      | Json_schema schema ->
-        to_jsonaf
-          ~tag:"json_schema"
-          ~extra_fields:[ "json_schema", Json_schema.jsonaf_of_t schema ]
-          ()
-    ;;
-
-    let t_of_jsonaf =
-      Tagged_union.of_jsonaf ~discriminator:"type" ~handle_tag:(fun tag json ->
-        match tag with
-        | "json_object" -> Json_object
-        | "json_schema" ->
-          (match Jsonaf.member "json_schema" json with
-           | Some s -> Json_schema (Json_schema.t_of_jsonaf s)
-           | None -> Jsonaf_kernel.Conv.of_jsonaf_error "Missing 'json_schema' field" json)
-        | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Unknown response_format type" json)
     ;;
   end
 

@@ -25,6 +25,7 @@
    (>= 5.4.1))
   ppx_jsonaf_conv
   ppx_jane
+  ppx_typed_fields
   async
   cohttp-async
   (async_ssl

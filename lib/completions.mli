@@ -150,13 +150,10 @@ end
 module Plugin : sig
   module Web : sig
     type t =
-      { id : string
-      ; enabled : bool option
+      { enabled : bool option
       ; max_results : int option
       }
     [@@deriving sexp_of]
-
-    val default : t
   end
 
   module Pdf_engine : sig
@@ -172,32 +169,14 @@ module Plugin : sig
       type t = { engine : Pdf_engine.t } [@@deriving sexp_of]
     end
 
-    type t =
-      { id : string
-      ; pdf : Pdf_config.t option
-      }
-    [@@deriving sexp_of]
-
-    val default : t
-  end
-
-  module Response_healing : sig
-    type t = { id : string } [@@deriving sexp_of]
-
-    val default : t
-  end
-
-  module Context_compression : sig
-    type t = { id : string } [@@deriving sexp_of]
-
-    val default : t
+    type t = { pdf : Pdf_config.t option } [@@deriving sexp_of]
   end
 
   type t =
     | Web of Web.t
     | File_parser of File_parser.t
-    | Response_healing of Response_healing.t
-    | Context_compression of Context_compression.t
+    | Response_healing
+    | Context_compression
   [@@deriving jsonaf, sexp_of]
 
   val web : ?enabled:bool -> ?max_results:int -> unit -> t
@@ -260,30 +239,6 @@ module Request : sig
     end
 
     module Content_part : sig
-      module Image_url : sig
-        type t = { url : string } [@@deriving sexp_of]
-      end
-
-      module File_data : sig
-        type t =
-          { filename : string
-          ; file_data : string
-          }
-        [@@deriving sexp_of]
-      end
-
-      module Input_audio : sig
-        type t =
-          { data : string (** Base64-encoded audio bytes (no [data:] prefix). *)
-          ; format : string (** e.g. "wav", "mp3", "aiff", "aac", "ogg", "flac". *)
-          }
-        [@@deriving sexp_of]
-      end
-
-      module Video_url : sig
-        type t = { url : string } [@@deriving sexp_of]
-      end
-
       (** Anthropic-style prompt-cache annotation. Attach to a content part
           and successive identical-prefix requests will hit the cache, yielding
           a non-zero [usage.prompt_tokens_details.cached_tokens]. *)
@@ -297,27 +252,76 @@ module Request : sig
         val ephemeral : ?ttl:string -> unit -> t
       end
 
+      module Text : sig
+        type t =
+          { text : string
+          ; cache_control : Cache_control.t option
+          }
+        [@@deriving sexp_of]
+      end
+
+      module Image_url : sig
+        module Url : sig
+          type t = { url : string } [@@deriving sexp_of]
+        end
+
+        type t =
+          { image_url : Url.t
+          ; cache_control : Cache_control.t option
+          }
+        [@@deriving sexp_of]
+      end
+
+      module File : sig
+        module Data : sig
+          type t =
+            { filename : string
+            ; file_data : string
+            }
+          [@@deriving sexp_of]
+        end
+
+        type t =
+          { file : Data.t
+          ; cache_control : Cache_control.t option
+          }
+        [@@deriving sexp_of]
+      end
+
+      module Input_audio : sig
+        module Data : sig
+          type t =
+            { data : string (** Base64-encoded audio bytes (no [data:] prefix). *)
+            ; format : string (** e.g. "wav", "mp3", "aiff", "aac", "ogg", "flac". *)
+            }
+          [@@deriving sexp_of]
+        end
+
+        type t =
+          { input_audio : Data.t
+          ; cache_control : Cache_control.t option
+          }
+        [@@deriving sexp_of]
+      end
+
+      module Video_url : sig
+        module Url : sig
+          type t = { url : string } [@@deriving sexp_of]
+        end
+
+        type t =
+          { video_url : Url.t
+          ; cache_control : Cache_control.t option
+          }
+        [@@deriving sexp_of]
+      end
+
       type t =
-        | Text of
-            { text : string
-            ; cache_control : Cache_control.t option
-            }
-        | Image_url of
-            { image_url : Image_url.t
-            ; cache_control : Cache_control.t option
-            }
-        | File of
-            { file : File_data.t
-            ; cache_control : Cache_control.t option
-            }
-        | Input_audio of
-            { input_audio : Input_audio.t
-            ; cache_control : Cache_control.t option
-            }
-        | Video_url of
-            { video_url : Video_url.t
-            ; cache_control : Cache_control.t option
-            }
+        | Text of Text.t
+        | Image_url of Image_url.t
+        | File of File.t
+        | Input_audio of Input_audio.t
+        | Video_url of Video_url.t
       [@@deriving sexp_of]
 
       val text : ?cache_control:Cache_control.t -> string -> t
@@ -538,10 +542,10 @@ module Request : sig
       [%jsonaf_of: [`Non_streaming] Request.t] extension form. *)
   type 'tag t [@@deriving jsonaf, sexp_of]
 
-  (** Build a non-streaming request — the body for [Completions.create].
-      Required: [~model] and [~messages]; everything else defaults. *)
-  val create
-    :  ?reasoning:Reasoning.t
+  (** Shared shape of [create] and [create_streaming]. Required: [~model] and
+      [~messages]; everything else defaults. *)
+  type 'tag create_args :=
+    ?reasoning:Reasoning.t
     -> ?tools:Tool.t list
     -> ?tool_choice:Tool_choice.t
     -> ?parallel_tool_calls:bool
@@ -573,43 +577,13 @@ module Request : sig
     -> model:string
     -> messages:Message.t list
     -> unit
-    -> [ `Non_streaming ] t
+    -> 'tag t
+
+  (** Build a non-streaming request — the body for [Completions.create]. *)
+  val create : [ `Non_streaming ] create_args
 
   (** Build a streaming request — the body for [Completions.create_stream]. *)
-  val create_streaming
-    :  ?reasoning:Reasoning.t
-    -> ?tools:Tool.t list
-    -> ?tool_choice:Tool_choice.t
-    -> ?parallel_tool_calls:bool
-    -> ?plugins:Plugin.t list
-    -> ?temperature:float
-    -> ?top_p:float
-    -> ?top_k:int
-    -> ?min_p:float
-    -> ?top_a:float
-    -> ?max_tokens:int
-    -> ?max_completion_tokens:int
-    -> ?seed:int
-    -> ?stop:string list
-    -> ?frequency_penalty:float
-    -> ?presence_penalty:float
-    -> ?repetition_penalty:float
-    -> ?logit_bias:Logit_bias.t
-    -> ?logprobs:bool
-    -> ?top_logprobs:int
-    -> ?verbosity:Verbosity.t
-    -> ?response_format:Response_format.t
-    -> ?structured_outputs:bool
-    -> ?modalities:string list
-    -> ?stream_options:Stream_options.t
-    -> ?service_tier:string
-    -> ?models:string list
-    -> ?transforms:string list
-    -> ?provider:Provider.t
-    -> model:string
-    -> messages:Message.t list
-    -> unit
-    -> [ `Streaming ] t
+  val create_streaming : [ `Streaming ] create_args
 end
 
 module Logprobs : sig
