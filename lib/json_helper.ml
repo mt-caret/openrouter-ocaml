@@ -24,6 +24,8 @@ struct
     ;;
   end
 
+  let arg_type = Command.Arg_type.create T.of_string
+
   include T
   include Jsonaf.Jsonafable.Of_stringable (T)
 end

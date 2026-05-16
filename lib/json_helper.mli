@@ -22,6 +22,8 @@ module Make_string_variant (T : sig
   end) : sig
   include Stringable.S with type t := T.t
   include Jsonaf.Jsonafable.S with type t := T.t
+
+  val arg_type : T.t Command.Arg_type.t
 end
 
 (** Derive jsonaf converters for JSON discriminated unions: objects with a

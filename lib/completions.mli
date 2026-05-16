@@ -464,6 +464,8 @@ module Request : sig
 
       (** [of_string] raises [Jsonaf_kernel.Conv.Of_jsonaf_error] on unknown values. *)
       include Stringable.S with type t := t
+
+      val arg_type : t Command.Arg_type.t
     end
 
     (** Effort and max_tokens are mutually exclusive: providers accept one but not
@@ -503,6 +505,8 @@ module Request : sig
 
     (** [of_string] raises [Jsonaf_kernel.Conv.Of_jsonaf_error] on unknown values. *)
     include Stringable.S with type t := t
+
+    val arg_type : t Command.Arg_type.t
   end
 
   module Stream_options : sig
@@ -559,6 +563,8 @@ module Request : sig
 
       include Stringable.S with type t := t
       include Jsonaf.Jsonafable.S with type t := t
+
+      val arg_type : t Command.Arg_type.t
     end
 
     module Data_collection : sig
@@ -569,6 +575,8 @@ module Request : sig
 
       include Stringable.S with type t := t
       include Jsonaf.Jsonafable.S with type t := t
+
+      val arg_type : t Command.Arg_type.t
     end
 
     module Max_price : sig
