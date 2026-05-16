@@ -16,7 +16,7 @@ module Provider_response : sig
     ; provider_name : string option
     ; status : int option
     }
-  [@@deriving sexp_of]
+  [@@deriving sexp]
 end
 
 (** Stats for a single generation. Many fields are nullable on the wire; we keep
@@ -66,7 +66,7 @@ module Stats : sig
     ; response_cache_source_id : string option
     ; provider_responses : Provider_response.t list
     }
-  [@@deriving fields ~iterators:to_list, sexp_of]
+  [@@deriving fields ~iterators:to_list, sexp]
 end
 
 (** [get ~api_key ~id ()] resolves to [Some stats] once the generation has been

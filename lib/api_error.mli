@@ -9,7 +9,7 @@ module Code : sig
   type t =
     | Int of int
     | String of string
-  [@@deriving jsonaf, sexp_of]
+  [@@deriving jsonaf, sexp]
 end
 
 module Details : sig
@@ -18,10 +18,10 @@ module Details : sig
     ; code : Code.t option
     ; metadata : Jsonaf.t option
     }
-  [@@deriving of_jsonaf, sexp_of]
+  [@@deriving of_jsonaf, sexp]
 end
 
-type t = { error : Details.t } [@@deriving of_jsonaf, sexp_of]
+type t = { error : Details.t } [@@deriving of_jsonaf, sexp]
 
 (** Try to parse error details from JSON, falling back to raw body if parsing fails. *)
 val of_json_or_body : body_string:string -> Jsonaf.t -> string

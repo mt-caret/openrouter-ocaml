@@ -14,7 +14,7 @@ module Provider_response = struct
     ; provider_name : string option [@default None]
     ; status : int option [@default None]
     }
-  [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+  [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 end
 
 module Stats = struct
@@ -62,11 +62,11 @@ module Stats = struct
     ; response_cache_source_id : string option [@default None]
     ; provider_responses : Provider_response.t list [@default []]
     }
-  [@@deriving fields ~iterators:to_list, of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+  [@@deriving fields ~iterators:to_list, of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 end
 
 module Response = struct
-  type t = { data : Stats.t } [@@deriving of_jsonaf, sexp_of]
+  type t = { data : Stats.t } [@@deriving of_jsonaf, sexp]
 end
 
 let get ~api_key ?app_info ?on_response_body ~id () =

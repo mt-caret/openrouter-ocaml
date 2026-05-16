@@ -1,75 +1,7 @@
 open! Core
 open! Async
 open Openrouter_api
-
-(* Each fixture lives in [responses/<name>.{json,ndjson}] and exercises a real
-   captured response body. The expected sexp is snapshot-tested so that any
-   future refactor that breaks parsing fails loudly here.
-
-   Capture flags on the example binary write the raw response body so adding
-   a fixture is one shell command; pick the right helper for the shape:
-
-   - [parse_response_fixture]   — chat /chat/completions response (one JSON file).
-   - [parse_stream_fixture]     — chat streaming chunks (NDJSON; one chunk per line).
-   - [parse_embeddings_fixture] — /embeddings response.
-   - [parse_generation_fixture] — /generation response.
-   - [parse_api_error_fixture]  — error envelope from any endpoint.
-
-   Don't add a fixture that just differs by model id — these tests are about
-   JSON shapes, not provider coverage. Pick combinations that produce a
-   structurally distinct response. *)
-
-let parse_fixture ~of_jsonaf ~sexp_of name ~ext =
-  let%bind body = Reader.file_contents [%string "responses/%{name}.%{ext}"] in
-  body |> Jsonaf.parse |> Or_error.ok_exn |> of_jsonaf |> sexp_of |> print_s;
-  Deferred.unit
-;;
-
-let parse_response_fixture =
-  parse_fixture
-    ~of_jsonaf:Completions.For_testing.response_of_jsonaf
-    ~sexp_of:[%sexp_of: Completions.Response.t]
-    ~ext:"json"
-;;
-
-let parse_stream_fixture name =
-  let%bind body = Reader.file_contents [%string "responses/%{name}.ndjson"] in
-  let chunks =
-    String.split_lines body
-    |> List.filter_map ~f:(fun line ->
-      match String.strip line with
-      | "" -> None
-      | line ->
-        line
-        |> Jsonaf.parse
-        |> Or_error.ok_exn
-        |> Completions.For_testing.stream_chunk_of_jsonaf
-        |> Some)
-  in
-  print_s [%sexp (chunks : Completions.Stream_chunk.t list)];
-  Deferred.unit
-;;
-
-let parse_embeddings_fixture =
-  parse_fixture
-    ~of_jsonaf:Embeddings.For_testing.response_of_jsonaf
-    ~sexp_of:[%sexp_of: Embeddings.Response.t]
-    ~ext:"json"
-;;
-
-let parse_generation_fixture =
-  parse_fixture
-    ~of_jsonaf:Generation.For_testing.stats_of_jsonaf
-    ~sexp_of:[%sexp_of: Generation.Stats.t]
-    ~ext:"json"
-;;
-
-let parse_api_error_fixture =
-  parse_fixture
-    ~of_jsonaf:[%of_jsonaf: Api_error.t]
-    ~sexp_of:[%sexp_of: Api_error.t]
-    ~ext:"json"
-;;
+open Fixture_helpers
 
 (* Anthropic via Amazon Bedrock: the response sets [content] to [null] when
    the assistant emits tool_calls instead of text, sets [system_fingerprint]
@@ -140,6 +72,40 @@ let%expect_test "openai_logprobs" =
         (((upstream_inference_cost (3.3E-06))
           (upstream_inference_prompt_cost (2.1E-06))
           (upstream_inference_completions_cost (1.2E-06)))))
+       (completion_tokens_details
+        (((reasoning_tokens (0)) (image_tokens (0)) (audio_tokens (0)))))
+       (server_tool_use ()))))
+    |}];
+  Deferred.unit
+;;
+
+(* Anthropic prompt caching: the second live request with the same large cached
+   prefix populated [cached_tokens] instead of [cache_write_tokens]. *)
+let%expect_test "cache_hit" =
+  let%bind () = parse_response_fixture "cache_hit" in
+  [%expect
+    {|
+    ((id gen-1778597988-dsMlxsD7JH3SlVZK9juX) (provider Anthropic)
+     (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion)
+     (created 1778597988)
+     (choices
+      (((logprobs ()) (finish_reason stop) (native_finish_reason end_turn)
+        (index 0)
+        (message
+         ((role assistant) (content (pong)) (refusal ()) (reasoning ())
+          (reasoning_details ()) (images ()) (annotations ()) (tool_calls ())
+          (tool_call_id ()))))))
+     (system_fingerprint ()) (service_tier (standard))
+     (usage
+      ((prompt_tokens 5054) (completion_tokens 5) (total_tokens 5059)
+       (cost (0.0005331)) (is_byok (false))
+       (prompt_tokens_details
+        (((cached_tokens (5051)) (cache_write_tokens (0)) (audio_tokens (0))
+          (video_tokens (0)))))
+       (cost_details
+        (((upstream_inference_cost (0.0005331))
+          (upstream_inference_prompt_cost (0.0005081))
+          (upstream_inference_completions_cost (2.5E-05)))))
        (completion_tokens_details
         (((reasoning_tokens (0)) (image_tokens (0)) (audio_tokens (0)))))
        (server_tool_use ()))))
@@ -1053,409 +1019,6 @@ let%expect_test "image_output" =
        (completion_tokens_details
         (((reasoning_tokens (0)) (image_tokens (1290)) (audio_tokens (0)))))
        (server_tool_use ()))))
-    |}];
-  Deferred.unit
-;;
-
-(* Streaming, simple text: a sequence of chunks consisting of a role-only
-   first chunk, content-delta chunks, and a final stop chunk. *)
-let%expect_test "stream_anthropic_haiku" =
-  let%bind () = parse_stream_fixture "stream_anthropic_haiku" in
-  [%expect
-    {|
-    (((id gen-1778404760-HzbZLh5i6tNjGlnRLzsQ) (provider "Amazon Bedrock")
-      (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
-      (created 1778404760)
-      (choices
-       (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
-         (delta
-          ((role (assistant)) (content (p)) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
-      (system_fingerprint ()) (service_tier ()) (usage ()))
-     ((id gen-1778404760-HzbZLh5i6tNjGlnRLzsQ) (provider "Amazon Bedrock")
-      (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
-      (created 1778404760)
-      (choices
-       (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
-         (delta
-          ((role (assistant)) (content (ong)) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
-      (system_fingerprint ()) (service_tier ()) (usage ()))
-     ((id gen-1778404760-HzbZLh5i6tNjGlnRLzsQ) (provider "Amazon Bedrock")
-      (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
-      (created 1778404760)
-      (choices
-       (((logprobs ()) (finish_reason (stop)) (native_finish_reason (end_turn))
-         (index 0)
-         (delta
-          ((role (assistant)) (content ("")) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
-      (system_fingerprint ()) (service_tier ()) (usage ()))
-     ((id gen-1778404760-HzbZLh5i6tNjGlnRLzsQ) (provider "Amazon Bedrock")
-      (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
-      (created 1778404760)
-      (choices
-       (((logprobs ()) (finish_reason (stop)) (native_finish_reason (end_turn))
-         (index 0)
-         (delta
-          ((role (assistant)) (content ("")) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
-      (system_fingerprint ()) (service_tier ())
-      (usage
-       (((prompt_tokens 13) (completion_tokens 5) (total_tokens 18)
-         (cost (3.8E-05)) (is_byok (false))
-         (prompt_tokens_details
-          (((cached_tokens (0)) (cache_write_tokens (0)) (audio_tokens (0))
-            (video_tokens (0)))))
-         (cost_details
-          (((upstream_inference_cost (3.8E-05))
-            (upstream_inference_prompt_cost (1.3E-05))
-            (upstream_inference_completions_cost (2.5E-05)))))
-         (completion_tokens_details
-          (((reasoning_tokens (0)) (image_tokens (0)) (audio_tokens (0)))))
-         (server_tool_use ()))))))
-    |}];
-  Deferred.unit
-;;
-
-(* Streaming with reasoning: chunks carry incremental [reasoning_details]
-   entries with partial [text] / [signature]. *)
-let%expect_test "stream_anthropic_reasoning" =
-  let%bind () = parse_stream_fixture "stream_anthropic_reasoning" in
-  [%expect
-    {|
-    (((id gen-1778404762-tuLs4if5ACychoL5FgWw) (provider "Amazon Bedrock")
-      (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
-      (created 1778404762)
-      (choices
-       (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
-         (delta
-          ((role (assistant)) (content ("")) (refusal ()) (reasoning (This))
-           (reasoning_details
-            (((format (anthropic-claude-v1)) (index (0)) (type_ (reasoning.text))
-              (text (This)) (signature ()) (data ()))))
-           (images ()) (annotations ()) (tool_calls ()))))))
-      (system_fingerprint ()) (service_tier ()) (usage ()))
-     ((id gen-1778404762-tuLs4if5ACychoL5FgWw) (provider "Amazon Bedrock")
-      (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
-      (created 1778404762)
-      (choices
-       (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
-         (delta
-          ((role (assistant)) (content ("")) (refusal ())
-           (reasoning (" is a straight"))
-           (reasoning_details
-            (((format (anthropic-claude-v1)) (index (0)) (type_ (reasoning.text))
-              (text (" is a straight")) (signature ()) (data ()))))
-           (images ()) (annotations ()) (tool_calls ()))))))
-      (system_fingerprint ()) (service_tier ()) (usage ()))
-     ((id gen-1778404762-tuLs4if5ACychoL5FgWw) (provider "Amazon Bedrock")
-      (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
-      (created 1778404762)
-      (choices
-       (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
-         (delta
-          ((role (assistant)) (content ("")) (refusal ())
-           (reasoning ("forward arithmetic"))
-           (reasoning_details
-            (((format (anthropic-claude-v1)) (index (0)) (type_ (reasoning.text))
-              (text ("forward arithmetic")) (signature ()) (data ()))))
-           (images ()) (annotations ()) (tool_calls ()))))))
-      (system_fingerprint ()) (service_tier ()) (usage ()))
-     ((id gen-1778404762-tuLs4if5ACychoL5FgWw) (provider "Amazon Bedrock")
-      (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
-      (created 1778404762)
-      (choices
-       (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
-         (delta
-          ((role (assistant)) (content ("")) (refusal ())
-           (reasoning (" question. "))
-           (reasoning_details
-            (((format (anthropic-claude-v1)) (index (0)) (type_ (reasoning.text))
-              (text (" question. ")) (signature ()) (data ()))))
-           (images ()) (annotations ()) (tool_calls ()))))))
-      (system_fingerprint ()) (service_tier ()) (usage ()))
-     ((id gen-1778404762-tuLs4if5ACychoL5FgWw) (provider "Amazon Bedrock")
-      (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
-      (created 1778404762)
-      (choices
-       (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
-         (delta
-          ((role (assistant)) (content ("")) (refusal ())
-           (reasoning ("1 + 1 = "))
-           (reasoning_details
-            (((format (anthropic-claude-v1)) (index (0)) (type_ (reasoning.text))
-              (text ("1 + 1 = ")) (signature ()) (data ()))))
-           (images ()) (annotations ()) (tool_calls ()))))))
-      (system_fingerprint ()) (service_tier ()) (usage ()))
-     ((id gen-1778404762-tuLs4if5ACychoL5FgWw) (provider "Amazon Bedrock")
-      (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
-      (created 1778404762)
-      (choices
-       (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
-         (delta
-          ((role (assistant)) (content ("")) (refusal ()) (reasoning (2.))
-           (reasoning_details
-            (((format (anthropic-claude-v1)) (index (0)) (type_ (reasoning.text))
-              (text (2.)) (signature ()) (data ()))))
-           (images ()) (annotations ()) (tool_calls ()))))))
-      (system_fingerprint ()) (service_tier ()) (usage ()))
-     ((id gen-1778404762-tuLs4if5ACychoL5FgWw) (provider "Amazon Bedrock")
-      (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
-      (created 1778404762)
-      (choices
-       (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
-         (delta
-          ((role (assistant)) (content ("")) (refusal ()) (reasoning ())
-           (reasoning_details
-            (((format (anthropic-claude-v1)) (index (0)) (type_ (reasoning.text))
-              (text ())
-              (signature
-               (EuMBCkgIDRABGAIqQBT3laJVTnu82MA+qIoM21rKNO7RavUnTB8hV2/jzC/qf/IkHKF+8sYptWVcO7SS3YeNr9R+77/331vMeJ5rnBUSDHmfEcEFvZ4NxlnXrRoMgUMHJQDVQQPGHZqmIjAxL0vdSycvENe6OtAw/BdZwR5+QTHW/cxWItq13SFnf0nu5n+AmDHv6mNx4sYGVsIqSQebHeU9PkpUtmYKYWtcCQZUXoJ7844EVTiVgGzy7G6LB/2a7mvcF/7ivM3oAcVFI9vhF2mFAB2IvVRFFvuoeOFJobt1TAfFZJkYAQ==))
-              (data ()))))
-           (images ()) (annotations ()) (tool_calls ()))))))
-      (system_fingerprint ()) (service_tier ()) (usage ()))
-     ((id gen-1778404762-tuLs4if5ACychoL5FgWw) (provider "Amazon Bedrock")
-      (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
-      (created 1778404762)
-      (choices
-       (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
-         (delta
-          ((role (assistant)) (content (1)) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
-      (system_fingerprint ()) (service_tier ()) (usage ()))
-     ((id gen-1778404762-tuLs4if5ACychoL5FgWw) (provider "Amazon Bedrock")
-      (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
-      (created 1778404762)
-      (choices
-       (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
-         (delta
-          ((role (assistant)) (content (" + 1 = **")) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
-      (system_fingerprint ()) (service_tier ()) (usage ()))
-     ((id gen-1778404762-tuLs4if5ACychoL5FgWw) (provider "Amazon Bedrock")
-      (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
-      (created 1778404762)
-      (choices
-       (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
-         (delta
-          ((role (assistant)) (content (2**)) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
-      (system_fingerprint ()) (service_tier ()) (usage ()))
-     ((id gen-1778404762-tuLs4if5ACychoL5FgWw) (provider "Amazon Bedrock")
-      (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
-      (created 1778404762)
-      (choices
-       (((logprobs ()) (finish_reason (stop)) (native_finish_reason (end_turn))
-         (index 0)
-         (delta
-          ((role (assistant)) (content ("")) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
-      (system_fingerprint ()) (service_tier ()) (usage ()))
-     ((id gen-1778404762-tuLs4if5ACychoL5FgWw) (provider "Amazon Bedrock")
-      (model anthropic/claude-4.5-haiku-20251001) (object_ chat.completion.chunk)
-      (created 1778404762)
-      (choices
-       (((logprobs ()) (finish_reason (stop)) (native_finish_reason (end_turn))
-         (index 0)
-         (delta
-          ((role (assistant)) (content ("")) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
-      (system_fingerprint ()) (service_tier ())
-      (usage
-       (((prompt_tokens 41) (completion_tokens 40) (total_tokens 81)
-         (cost (0.000241)) (is_byok (false))
-         (prompt_tokens_details
-          (((cached_tokens (0)) (cache_write_tokens (0)) (audio_tokens (0))
-            (video_tokens (0)))))
-         (cost_details
-          (((upstream_inference_cost (0.000241))
-            (upstream_inference_prompt_cost (4.1E-05))
-            (upstream_inference_completions_cost (0.0002)))))
-         (completion_tokens_details
-          (((reasoning_tokens (15)) (image_tokens (0)) (audio_tokens (0)))))
-         (server_tool_use ()))))))
-    |}];
-  Deferred.unit
-;;
-
-(* Streaming with [stream_options.include_usage = true]: an extra final
-   chunk carries the [usage] field populated. *)
-let%expect_test "stream_openai_with_usage" =
-  let%bind () = parse_stream_fixture "stream_openai_with_usage" in
-  [%expect
-    {|
-    (((id gen-1778404764-hvcUxQzjmt0eYSWjgRL8) (provider Azure)
-      (model openai/gpt-4o-mini) (object_ chat.completion.chunk)
-      (created 1778404764)
-      (choices
-       (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
-         (delta
-          ((role (assistant)) (content (P)) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
-      (system_fingerprint (fp_eb37e061ec)) (service_tier ()) (usage ()))
-     ((id gen-1778404764-hvcUxQzjmt0eYSWjgRL8) (provider Azure)
-      (model openai/gpt-4o-mini) (object_ chat.completion.chunk)
-      (created 1778404764)
-      (choices
-       (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
-         (delta
-          ((role (assistant)) (content (ong)) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
-      (system_fingerprint (fp_eb37e061ec)) (service_tier ()) (usage ()))
-     ((id gen-1778404764-hvcUxQzjmt0eYSWjgRL8) (provider Azure)
-      (model openai/gpt-4o-mini) (object_ chat.completion.chunk)
-      (created 1778404764)
-      (choices
-       (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
-         (delta
-          ((role (assistant)) (content (!)) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
-      (system_fingerprint (fp_eb37e061ec)) (service_tier ()) (usage ()))
-     ((id gen-1778404764-hvcUxQzjmt0eYSWjgRL8) (provider Azure)
-      (model openai/gpt-4o-mini) (object_ chat.completion.chunk)
-      (created 1778404764)
-      (choices
-       (((logprobs ()) (finish_reason (stop)) (native_finish_reason (stop))
-         (index 0)
-         (delta
-          ((role (assistant)) (content ("")) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
-      (system_fingerprint (fp_eb37e061ec)) (service_tier ()) (usage ()))
-     ((id gen-1778404764-hvcUxQzjmt0eYSWjgRL8) (provider Azure)
-      (model openai/gpt-4o-mini) (object_ chat.completion.chunk)
-      (created 1778404764)
-      (choices
-       (((logprobs ()) (finish_reason (stop)) (native_finish_reason (stop))
-         (index 0)
-         (delta
-          ((role (assistant)) (content ("")) (refusal ()) (reasoning ())
-           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ()))))))
-      (system_fingerprint (fp_eb37e061ec)) (service_tier ())
-      (usage
-       (((prompt_tokens 11) (completion_tokens 4) (total_tokens 15)
-         (cost (4.05E-06)) (is_byok (false))
-         (prompt_tokens_details
-          (((cached_tokens (0)) (cache_write_tokens (0)) (audio_tokens (0))
-            (video_tokens (0)))))
-         (cost_details
-          (((upstream_inference_cost (4.05E-06))
-            (upstream_inference_prompt_cost (1.65E-06))
-            (upstream_inference_completions_cost (2.4E-06)))))
-         (completion_tokens_details
-          (((reasoning_tokens (0)) (image_tokens (0)) (audio_tokens (0)))))
-         (server_tool_use ()))))))
-    |}];
-  Deferred.unit
-;;
-
-let%expect_test "embeddings" =
-  let%bind () = parse_embeddings_fixture "embeddings" in
-  [%expect
-    {|
-    ((object_ list) (model text-embedding-3-small)
-     (data
-      (((object_ embedding) (index 0)
-        (embedding
-         (-0.0704345703125 -0.40625 0.353759765625 0.298095703125 -0.25732421875
-          -0.435302734375 -0.314208984375 0.51171875)))))
-     (usage ((prompt_tokens 2) (total_tokens 2) (cost (4E-08))))
-     (provider (OpenAI)) (id (gen-emb-1778404857-ROxqLrvPOiI66GL9MNIr)))
-    |}];
-  Deferred.unit
-;;
-
-(* /generation endpoint shape: the wire format is [{"data": <Stats.t>}] — the
-   helper unwraps [.data]. *)
-let%expect_test "generation" =
-  let%bind () = parse_generation_fixture "generation" in
-  [%expect
-    {|
-    ((id gen-1778404767-XJNkUcdzAMdCArHue8Nn) (model openai/gpt-4o-mini)
-     (provider_name (Azure)) (created_at 2026-05-10T09:19:27.555Z)
-     (api_type (completions)) (origin ("")) (user_agent (ocaml-cohttp/v6.1.1))
-     (http_referer ()) (session_id ())
-     (request_id (req-1778404767-cGyksnLNZGDy2UKpprpv))
-     (upstream_id (bd0a78c5-7812-44c2-a290-dd0dbd65af13)) (app_id ())
-     (external_user ()) (router ()) (streamed (true)) (cancelled (false))
-     (is_byok (false)) (finish_reason (stop)) (native_finish_reason (stop))
-     (service_tier ()) (latency (489)) (moderation_latency ())
-     (generation_time (648)) (tokens_prompt (2)) (tokens_completion (8))
-     (native_tokens_prompt (11)) (native_tokens_completion (10))
-     (native_tokens_completion_images ()) (native_tokens_reasoning (0))
-     (native_tokens_cached (0)) (num_media_prompt ()) (num_input_audio_prompt ())
-     (num_media_completion (0)) (num_search_results ()) (num_fetches ())
-     (web_search_engine ()) (usage (7.65E-06)) (total_cost (7.65E-06))
-     (upstream_inference_cost (0)) (cache_discount ())
-     (response_cache_source_id ())
-     (provider_responses
-      (((endpoint_id (685e6cfb-ecef-4c83-8e2d-aa1ba667d744))
-        (id (bd0a78c5-7812-44c2-a290-dd0dbd65af13)) (is_byok (false))
-        (latency (376)) (model_permaslug (openai/gpt-4o-mini))
-        (provider_name (Azure)) (status (200))))))
-    |}];
-  Deferred.unit
-;;
-
-(* /models is large (hundreds of entries × deeply-nested per-model records),
-   so instead of snapshotting every model we verify the full body parses
-   without error and snapshot a summary: total count + the first model in
-   the list (for full-shape coverage of [Model_info.t]). *)
-let%expect_test "models_list" =
-  let%bind body = Reader.file_contents "responses/models_list.json" in
-  let response =
-    body |> Jsonaf.parse |> Or_error.ok_exn |> Models.For_testing.response_of_jsonaf
-  in
-  print_s
-    [%message
-      ""
-        ~count:(List.length response.data : int)
-        ~first:(List.hd_exn response.data : Models.Model_info.t)];
-  [%expect
-    {|
-    ((count 367)
-     (first
-      ((id inclusionai/ring-2.6-1t:free)
-       (canonical_slug inclusionai/ring-2.6-1t-20260508) (hugging_face_id ())
-       (name "inclusionAI: Ring-2.6-1T (free)") (created 1778247440)
-       (description
-        ("Ring-2.6-1T is a 1T-parameter-scale thinking model with 63B active parameters, built for real-world agent workflows that require both strong capability and operational efficiency. It is optimized for coding agents, tool..."))
-       (context_length (262144))
-       (pricing
-        ((prompt 0) (completion 0) (request ()) (image ()) (image_token ())
-         (image_output ()) (audio ()) (input_audio_cache ()) (web_search ())
-         (internal_reasoning ()) (input_cache_read ()) (input_cache_write ())
-         (discount ())))
-       (architecture
-        ((tokenizer (Other)) (instruct_type ()) (modality (text->text))
-         (input_modalities (text)) (output_modalities (text))))
-       (top_provider
-        ((context_length (262144)) (max_completion_tokens (65536))
-         (is_moderated false)))
-       (per_request_limits ())
-       (supported_parameters
-        (frequency_penalty include_reasoning max_tokens presence_penalty
-         reasoning repetition_penalty seed stop temperature tool_choice tools
-         top_k top_p))
-       (default_parameters
-        (((temperature ()) (top_p ()) (top_k ()) (frequency_penalty ())
-          (presence_penalty ()) (repetition_penalty ()))))
-       (knowledge_cutoff ()) (expiration_date ())
-       (links
-        (((details (/api/v1/models/inclusionai/ring-2.6-1t-20260508/endpoints))))))))
-    |}];
-  Deferred.unit
-;;
-
-(* Error envelope: [code] is a plain int, the body has an extra [user_id]
-   field at top level (handled by [@@jsonaf.allow_extra_fields]). *)
-let%expect_test "api_error_bad_model" =
-  let%bind () = parse_api_error_fixture "api_error_bad_model" in
-  [%expect
-    {|
-    ((error
-      ((message "totally-not-a-model/foo is not a valid model ID")
-       (code ((Int 400))) (metadata ()))))
     |}];
   Deferred.unit
 ;;

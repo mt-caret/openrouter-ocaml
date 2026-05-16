@@ -23,7 +23,7 @@ module Reasoning_detail = struct
     ; data : string option [@default None] [@jsonaf_drop_default.equal]
       (* Google's encrypted reasoning *)
     }
-  [@@deriving equal, jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+  [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 end
 
 (* Image in a message response. [index] is absent on Gemini's image-output
@@ -31,7 +31,7 @@ end
 module Image = struct
   module Image_url = struct
     type t = { url : string }
-    [@@deriving equal, jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+    [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
   end
 
   type t =
@@ -39,7 +39,7 @@ module Image = struct
     ; image_url : Image_url.t
     ; index : int option [@default None] [@jsonaf_drop_default.equal]
     }
-  [@@deriving equal, jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+  [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 
   module Elide_data = struct
     type nonrec t = t =
@@ -47,8 +47,18 @@ module Image = struct
       ; image_url : (Image_url.t[@sexp.opaque])
       ; index : int option
       }
-    [@@deriving sexp_of]
+    [@@deriving sexp]
   end
+end
+
+module Audio_output = struct
+  type t =
+    { id : string option [@default None]
+    ; data : string option [@default None]
+    ; expires_at : int option [@default None]
+    ; transcript : string option [@default None]
+    }
+  [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 end
 
 (* Tool calling types per OpenRouter API spec:
@@ -57,7 +67,7 @@ end
 module Tool = struct
   (* JSON value with equality (Jsonaf.t has exactly_equal but not equal). *)
   module Json_schema = struct
-    type t = Jsonaf.t [@@deriving jsonaf, sexp_of]
+    type t = Jsonaf.t [@@deriving jsonaf, sexp]
 
     let equal = Jsonaf.exactly_equal
   end
@@ -67,24 +77,177 @@ module Tool = struct
       { name : string
       ; description : string option [@jsonaf.option]
       ; parameters : Json_schema.t option [@jsonaf.option]
+      ; strict : bool option [@jsonaf.option]
       }
-    [@@deriving equal, jsonaf, sexp_of]
+    [@@deriving equal, jsonaf, sexp]
   end
 
-  type t =
-    { type_ : string [@key "type"] (* Always "function" *)
-    ; function_ : Function.t [@key "function"]
-    }
-  [@@deriving equal, jsonaf, sexp_of]
+  module Web_search = struct
+    type t =
+      { engine : string option [@jsonaf.option]
+      ; max_results : int option [@jsonaf.option]
+      ; max_total_results : int option [@jsonaf.option]
+      ; search_context_size : string option [@jsonaf.option]
+      ; allowed_domains : string list option [@jsonaf.option]
+      ; blocked_domains : string list option [@key "excluded_domains"] [@jsonaf.option]
+      }
+    [@@deriving equal, jsonaf, sexp]
+  end
 
-  let create ~name ?description ?parameters () =
-    { type_ = "function"; function_ = { name; description; parameters } }
+  module Web_fetch = struct
+    type t =
+      { engine : string option [@jsonaf.option]
+      ; max_uses : int option [@jsonaf.option]
+      ; max_content_tokens : int option [@jsonaf.option]
+      ; allowed_domains : string list option [@jsonaf.option]
+      ; blocked_domains : string list option [@jsonaf.option]
+      }
+    [@@deriving equal, jsonaf, sexp]
+  end
+
+  module Image_generation = struct
+    (* [parameters] are extra object fields in OpenRouter's
+       ImageGenerationServerToolConfig, alongside [model] and [prompt]. *)
+    type t =
+      { model : string option [@jsonaf.option]
+      ; prompt : string option [@jsonaf.option]
+      ; parameters : (string * Json_schema.t) list
+      }
+    [@@deriving equal, sexp]
+
+    let jsonaf_of_t { model; prompt; parameters } =
+      `Object
+        (List.filter_opt
+           [ Option.map model ~f:(fun model -> "model", `String model)
+           ; Option.map prompt ~f:(fun prompt -> "prompt", `String prompt)
+           ]
+         @ parameters)
+    ;;
+
+    let t_of_jsonaf = function
+      | `Object kvs ->
+        let one_or_none ~field values =
+          match values with
+          | [] -> None
+          | [ value ] -> Some value
+          | _ :: _ :: _ ->
+            Jsonaf_kernel.Conv.of_jsonaf_error
+              [%string "Duplicate image_generation %{field} field"]
+              (`Object kvs)
+        in
+        let models, prompts, parameters =
+          List.partition3_map kvs ~f:(fun (k, v) ->
+            match k, v with
+            | "model", `String s -> `Fst s
+            | "prompt", `String s -> `Snd s
+            | "model", _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Expected string model" v
+            | "prompt", _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Expected string prompt" v
+            | _ -> `Trd (k, v))
+        in
+        { model = one_or_none ~field:"model" models
+        ; prompt = one_or_none ~field:"prompt" prompts
+        ; parameters
+        }
+      | json ->
+        Jsonaf_kernel.Conv.of_jsonaf_error
+          "Expected object for image_generation parameters"
+          json
+    ;;
+  end
+
+  module Search_models = struct
+    type t = { max_results : int option [@jsonaf.option] }
+    [@@deriving equal, jsonaf, sexp]
+  end
+
+  module T = struct
+    type t =
+      | Function of Function.t
+      | Web_search of Web_search.t
+      | Web_fetch of Web_fetch.t
+      | Datetime
+      | Image_generation of Image_generation.t
+      | Search_models of Search_models.t
+    [@@deriving equal, sexp, typed_variants]
+
+    let discriminator = "type"
+
+    (* The "function" tool is the OpenAI standard; everything else is an
+       OpenRouter server-tool, namespaced under [openrouter:]. *)
+    let tag =
+      `Custom
+        (fun { Typed_variant.Packed.f = T v } ->
+          match v with
+          | Function -> "function"
+          | Web_search | Web_fetch | Datetime | Image_generation ->
+            "openrouter:" ^ Typed_variant.name v
+          | Search_models -> "openrouter:experimental__search_models")
+    ;;
+
+    let codec : type a. a Typed_variant.t -> a Json_helper.Tagged_union_codec.t = function
+      | Function ->
+        Json_helper.nested ~key:"function" Function.jsonaf_of_t Function.t_of_jsonaf
+      | Web_search ->
+        Json_helper.nested ~key:"parameters" Web_search.jsonaf_of_t Web_search.t_of_jsonaf
+      | Web_fetch ->
+        Json_helper.nested ~key:"parameters" Web_fetch.jsonaf_of_t Web_fetch.t_of_jsonaf
+      | Datetime -> Tag_only
+      | Image_generation ->
+        Json_helper.nested
+          ~key:"parameters"
+          Image_generation.jsonaf_of_t
+          Image_generation.t_of_jsonaf
+      | Search_models ->
+        Json_helper.nested
+          ~key:"parameters"
+          Search_models.jsonaf_of_t
+          Search_models.t_of_jsonaf
+    ;;
+  end
+
+  include T
+  include Json_helper.Make_tagged_union (T)
+
+  let function_ ~name ?description ?parameters ?strict () =
+    Function { name; description; parameters; strict }
   ;;
+
+  let web_search
+        ?engine
+        ?max_results
+        ?max_total_results
+        ?search_context_size
+        ?allowed_domains
+        ?blocked_domains
+        ()
+    =
+    Web_search
+      { engine
+      ; max_results
+      ; max_total_results
+      ; search_context_size
+      ; allowed_domains
+      ; blocked_domains
+      }
+  ;;
+
+  let web_fetch ?engine ?max_uses ?max_content_tokens ?allowed_domains ?blocked_domains ()
+    =
+    Web_fetch { engine; max_uses; max_content_tokens; allowed_domains; blocked_domains }
+  ;;
+
+  let datetime = Datetime
+
+  let image_generation ?model ?prompt ?(parameters = []) () =
+    Image_generation { model; prompt; parameters }
+  ;;
+
+  let search_models ?max_results () = Search_models { max_results }
 end
 
 module Tool_choice = struct
   module Function_choice = struct
-    type t = { name : string } [@@deriving jsonaf, sexp_of]
+    type t = { name : string } [@@deriving jsonaf, sexp]
   end
 
   module Specific = struct
@@ -92,7 +255,7 @@ module Tool_choice = struct
       { type_ : string [@key "type"]
       ; function_ : Function_choice.t [@key "function"]
       }
-    [@@deriving jsonaf, sexp_of]
+    [@@deriving jsonaf, sexp]
   end
 
   type t =
@@ -100,7 +263,7 @@ module Tool_choice = struct
     | None_
     | Required
     | Specific of Specific.t
-  [@@deriving sexp_of]
+  [@@deriving sexp]
 
   let t_of_jsonaf json =
     match json with
@@ -122,6 +285,20 @@ module Tool_choice = struct
   let none = None_
   let required = Required
   let force_function name = Specific { type_ = "function"; function_ = { name } }
+
+  let of_string s =
+    match String.lsplit2 s ~on:':' with
+    | None ->
+      (match String.lowercase s with
+       | "auto" -> auto
+       | "none" -> none
+       | "required" -> required
+       | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "unknown tool_choice" (`String s))
+    | Some ("function", name) when not (String.is_empty name) -> force_function name
+    | Some _ -> Jsonaf_kernel.Conv.of_jsonaf_error "unknown tool_choice" (`String s)
+  ;;
+
+  let arg_type = Command.Arg_type.create of_string
 end
 
 module Tool_call = struct
@@ -130,7 +307,7 @@ module Tool_call = struct
       { name : string
       ; arguments : string (* JSON-encoded string *)
       }
-    [@@deriving equal, jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+    [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
   end
 
   type t =
@@ -138,19 +315,24 @@ module Tool_call = struct
     ; type_ : string [@key "type"]
     ; function_ : Function_call.t [@key "function"]
     }
-  [@@deriving equal, jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+  [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 end
 
 module Plugin = struct
+  module Auto_router = struct
+    type t =
+      { enabled : bool option [@jsonaf.option]
+      ; allowed_models : string list option [@jsonaf.option]
+      }
+    [@@deriving equal, jsonaf, sexp]
+  end
+
   module Web = struct
     type t =
-      { id : string
-      ; enabled : bool option [@jsonaf.option]
+      { enabled : bool option [@jsonaf.option]
       ; max_results : int option [@jsonaf.option]
       }
-    [@@deriving equal, jsonaf, sexp_of]
-
-    let default = { id = "web"; enabled = None; max_results = None }
+    [@@deriving equal, jsonaf, sexp]
   end
 
   module Pdf_engine = struct
@@ -159,51 +341,74 @@ module Plugin = struct
         | Pdf_text
         | Mistral_ocr
         | Native
-      [@@deriving equal, sexp_of, enumerate]
+      [@@deriving equal, sexp, enumerate]
     end
 
     include T
-    include String_variant.Make (T)
+    include Json_helper.Make_string_variant (T)
   end
 
   module File_parser = struct
     module Pdf_config = struct
-      type t = { engine : Pdf_engine.t } [@@deriving equal, jsonaf, sexp_of]
+      type t = { engine : Pdf_engine.t } [@@deriving equal, jsonaf, sexp]
     end
 
-    type t =
-      { id : string
-      ; pdf : Pdf_config.t option [@jsonaf.option]
-      }
-    [@@deriving equal, jsonaf, sexp_of]
-
-    let default = { id = "file-parser"; pdf = None }
+    type t = { pdf : Pdf_config.t option [@jsonaf.option] }
+    [@@deriving equal, jsonaf, sexp]
   end
 
-  type t =
-    | Web of Web.t
-    | File_parser of File_parser.t
-  [@@deriving equal, sexp_of]
+  module Pareto_router = struct
+    type t =
+      { enabled : bool option [@jsonaf.option]
+      ; min_coding_score : float option [@jsonaf.option]
+      }
+    [@@deriving equal, jsonaf, sexp]
+  end
 
-  let jsonaf_of_t = function
-    | Web w -> Web.jsonaf_of_t w
-    | File_parser f -> File_parser.jsonaf_of_t f
-  ;;
+  module T = struct
+    type t =
+      | Auto_router of Auto_router.t
+      | Moderation
+      | Web of Web.t
+      | File_parser of File_parser.t
+      | Response_healing
+      | Context_compression
+      | Pareto_router of Pareto_router.t
+    [@@deriving equal, sexp, typed_variants]
 
-  let t_of_jsonaf json =
-    match Jsonaf.member "id" json with
-    | Some (`String "web") -> Web (Web.t_of_jsonaf json)
-    | Some (`String "file-parser") -> File_parser (File_parser.t_of_jsonaf json)
-    | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Unknown plugin id" json
-  ;;
+    let discriminator = "id"
+    let tag = `Kebab_case
 
-  let web ?enabled ?max_results () = Web { id = "web"; enabled; max_results }
+    let codec : type a. a Typed_variant.t -> a Json_helper.Tagged_union_codec.t = function
+      | Auto_router -> Inline (Auto_router.jsonaf_of_t, Auto_router.t_of_jsonaf)
+      | Moderation -> Tag_only
+      | Web -> Inline (Web.jsonaf_of_t, Web.t_of_jsonaf)
+      | File_parser -> Inline (File_parser.jsonaf_of_t, File_parser.t_of_jsonaf)
+      | Response_healing -> Tag_only
+      | Context_compression -> Tag_only
+      | Pareto_router -> Inline (Pareto_router.jsonaf_of_t, Pareto_router.t_of_jsonaf)
+    ;;
+  end
+
+  include T
+  include Json_helper.Make_tagged_union (T)
+
+  let auto_router ?enabled ?allowed_models () = Auto_router { enabled; allowed_models }
+  let web ?enabled ?max_results () = Web { enabled; max_results }
 
   let file_parser ?pdf_engine () =
     let pdf =
       Option.map pdf_engine ~f:(fun engine -> { File_parser.Pdf_config.engine })
     in
-    File_parser { id = "file-parser"; pdf }
+    File_parser { pdf }
+  ;;
+
+  let moderation = Moderation
+  let response_healing = Response_healing
+  let context_compression = Context_compression
+
+  let pareto_router ?enabled ?min_coding_score () =
+    Pareto_router { enabled; min_coding_score }
   ;;
 end
 
@@ -215,7 +420,7 @@ module Citation = struct
     ; start_index : int option [@jsonaf.option]
     ; end_index : int option [@jsonaf.option]
     }
-  [@@deriving equal, of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+  [@@deriving equal, of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 
   let of_annotation_jsonaf json =
     match Jsonaf.member "type" json with
@@ -232,6 +437,7 @@ module Message = struct
     { role : string
     ; content : string option
           [@default None] (* content can be null when assistant makes tool calls *)
+    ; audio : Audio_output.t option [@default None] [@sexp_drop_default.equal]
     ; refusal : string option [@default None]
     ; reasoning : string option [@default None]
     ; reasoning_details : Reasoning_detail.t list
@@ -243,12 +449,13 @@ module Message = struct
     ; tool_call_id : string option [@default None] [@jsonaf_drop_default.equal]
       (* For tool role messages: ID of the tool call being responded to *)
     }
-  [@@deriving jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+  [@@deriving jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 
   module Elide_image = struct
     type nonrec t = t =
       { role : string
       ; content : string option
+      ; audio : Audio_output.t option
       ; refusal : string option
       ; reasoning : string option
       ; reasoning_details : Reasoning_detail.t list
@@ -257,7 +464,7 @@ module Message = struct
       ; tool_calls : Tool_call.t list
       ; tool_call_id : string option
       }
-    [@@deriving sexp_of]
+    [@@deriving sexp]
   end
 end
 
@@ -269,7 +476,7 @@ module Request = struct
           { name : string
           ; arguments : string
           }
-        [@@deriving equal, jsonaf, sexp_of]
+        [@@deriving equal, jsonaf, sexp]
       end
 
       type t =
@@ -277,62 +484,131 @@ module Request = struct
         ; type_ : string [@key "type"]
         ; function_ : Function_call.t [@key "function"]
         }
-      [@@deriving equal, jsonaf, sexp_of]
+      [@@deriving equal, jsonaf, sexp]
     end
 
     module Content_part = struct
-      module Image_url = struct
-        type t = { url : string } [@@deriving equal, jsonaf, sexp_of]
-      end
-
-      module File_data = struct
+      module Cache_control = struct
         type t =
-          { filename : string
-          ; file_data : string
+          { type_ : string [@key "type"]
+          ; ttl : string option [@jsonaf.option]
           }
-        [@@deriving equal, jsonaf, sexp_of]
+        [@@deriving equal, jsonaf, sexp]
+
+        let ephemeral ?ttl () = { type_ = "ephemeral"; ttl }
       end
 
-      type t =
-        | Text of { text : string }
-        | Image_url of { image_url : Image_url.t }
-        | File of { file : File_data.t }
-      [@@deriving equal, sexp_of]
+      module Text = struct
+        type t =
+          { text : string
+          ; cache_control : Cache_control.t option [@jsonaf.option]
+          }
+        [@@deriving equal, jsonaf, sexp]
+      end
 
-      let text s = Text { text = s }
+      module Image_url = struct
+        module Url = struct
+          type t = { url : string } [@@deriving equal, jsonaf, sexp]
+        end
 
-      let image_base64 ~mime_type ~data =
+        type t =
+          { image_url : Url.t
+          ; cache_control : Cache_control.t option [@jsonaf.option]
+          }
+        [@@deriving equal, jsonaf, sexp]
+      end
+
+      module File = struct
+        module Data = struct
+          type t =
+            { filename : string
+            ; file_data : string
+            }
+          [@@deriving equal, jsonaf, sexp]
+        end
+
+        type t =
+          { file : Data.t
+          ; cache_control : Cache_control.t option [@jsonaf.option]
+          }
+        [@@deriving equal, jsonaf, sexp]
+      end
+
+      module Input_audio = struct
+        module Data = struct
+          type t =
+            { data : string (** Base64-encoded audio bytes (no [data:] prefix). *)
+            ; format : string (** e.g. "wav", "mp3", "aiff", "aac", "ogg", "flac". *)
+            }
+          [@@deriving equal, jsonaf, sexp]
+        end
+
+        type t =
+          { input_audio : Data.t
+          ; cache_control : Cache_control.t option [@jsonaf.option]
+          }
+        [@@deriving equal, jsonaf, sexp]
+      end
+
+      module Video_url = struct
+        module Url = struct
+          type t = { url : string } [@@deriving equal, jsonaf, sexp]
+        end
+
+        type t =
+          { video_url : Url.t
+          ; cache_control : Cache_control.t option [@jsonaf.option]
+          }
+        [@@deriving equal, jsonaf, sexp]
+      end
+
+      module T = struct
+        type t =
+          | Text of Text.t
+          | Image_url of Image_url.t
+          | File of File.t
+          | Input_audio of Input_audio.t
+          | Video_url of Video_url.t
+        [@@deriving equal, sexp, typed_variants]
+
+        let discriminator = "type"
+        let tag = `Infer
+
+        let codec : type a. a Typed_variant.t -> a Json_helper.Tagged_union_codec.t =
+          function
+          | Text -> Inline (Text.jsonaf_of_t, Text.t_of_jsonaf)
+          | Image_url -> Inline (Image_url.jsonaf_of_t, Image_url.t_of_jsonaf)
+          | File -> Inline (File.jsonaf_of_t, File.t_of_jsonaf)
+          | Input_audio -> Inline (Input_audio.jsonaf_of_t, Input_audio.t_of_jsonaf)
+          | Video_url -> Inline (Video_url.jsonaf_of_t, Video_url.t_of_jsonaf)
+        ;;
+      end
+
+      include T
+      include Json_helper.Make_tagged_union (T)
+
+      let text ?cache_control s = Text { text = s; cache_control }
+
+      let image_base64 ?cache_control ~mime_type ~data () =
         let url = sprintf "data:%s;base64,%s" mime_type data in
-        Image_url { image_url = { url } }
+        Image_url { image_url = { url }; cache_control }
       ;;
 
-      let file ~filename ~file_data = File { file = { filename; file_data } }
-
-      let jsonaf_of_t = function
-        | Text { text } -> `Object [ "type", `String "text"; "text", `String text ]
-        | Image_url { image_url } ->
-          `Object
-            [ "type", `String "image_url"; "image_url", Image_url.jsonaf_of_t image_url ]
-        | File { file } ->
-          `Object [ "type", `String "file"; "file", File_data.jsonaf_of_t file ]
+      let file ?cache_control ~filename ~file_data () =
+        File { file = { filename; file_data }; cache_control }
       ;;
 
-      let t_of_jsonaf json =
-        match Jsonaf.member "type" json with
-        | Some (`String "text") ->
-          (match Jsonaf.member "text" json with
-           | Some (`String text) -> Text { text }
-           | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Expected 'text' field" json)
-        | Some (`String "image_url") ->
-          (match Jsonaf.member "image_url" json with
-           | Some image_url_json ->
-             Image_url { image_url = Image_url.t_of_jsonaf image_url_json }
-           | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Expected 'image_url' field" json)
-        | Some (`String "file") ->
-          (match Jsonaf.member "file" json with
-           | Some file_json -> File { file = File_data.t_of_jsonaf file_json }
-           | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Expected 'file' field" json)
-        | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Unknown content part type" json
+      let audio ?cache_control ~format ~data () =
+        Input_audio { input_audio = { data; format }; cache_control }
+      ;;
+
+      let video_url ?cache_control ~url () =
+        Video_url { video_url = { url }; cache_control }
+      ;;
+
+      let video_base64 ?cache_control ~mime_type ~data () =
+        let url = sprintf "data:%s;base64,%s" mime_type data in
+        Video_url { video_url = { url }; cache_control }
       ;;
     end
 
@@ -340,7 +616,7 @@ module Request = struct
       type t =
         | Text of string
         | Multipart of Content_part.t list
-      [@@deriving equal, sexp_of]
+      [@@deriving equal, sexp]
 
       let text s = Text s
       let multipart parts = Multipart parts
@@ -370,7 +646,7 @@ module Request = struct
       ; tool_call_id : string option [@default None] [@jsonaf_drop_default.equal]
         (* For tool role: ID of the tool call being responded to *)
       }
-    [@@deriving jsonaf, sexp_of]
+    [@@deriving jsonaf, sexp]
 
     let user content =
       { role = "user"
@@ -413,6 +689,8 @@ module Request = struct
     ;;
   end
 
+  module Cache_control = Message.Content_part.Cache_control
+
   module Reasoning = struct
     module Effort = struct
       module T = struct
@@ -423,11 +701,11 @@ module Request = struct
           | Low
           | Minimal
           | None_
-        [@@deriving sexp_of, enumerate]
+        [@@deriving sexp, enumerate]
       end
 
       include T
-      include String_variant.Make (T)
+      include Json_helper.Make_string_variant (T)
     end
 
     type t =
@@ -435,8 +713,19 @@ module Request = struct
       ; max_tokens : int option [@jsonaf.option]
       ; exclude : bool option [@jsonaf.option]
       ; enabled : bool option [@jsonaf.option]
+      ; summary : string option [@jsonaf.option]
       }
-    [@@deriving jsonaf, sexp_of]
+    [@@deriving jsonaf, sexp]
+
+    (* OpenRouter's reasoning API spec: "[effort] and [max_tokens] are
+       mutually exclusive". Enforce that here so the failure surfaces locally
+       instead of as a 400 from the wire. *)
+    let create ?effort ?max_tokens ?exclude ?enabled ?summary () =
+      match effort, max_tokens with
+      | Some _, Some _ ->
+        Or_error.error_string "Reasoning: effort and max_tokens are mutually exclusive"
+      | _ -> Ok { effort; max_tokens; exclude; enabled; summary }
+    ;;
   end
 
   module Verbosity = struct
@@ -447,19 +736,142 @@ module Request = struct
         | High
         | Xhigh
         | Max
-      [@@deriving sexp_of, enumerate]
+      [@@deriving sexp, enumerate]
     end
 
     include T
-    include String_variant.Make (T)
+    include Json_helper.Make_string_variant (T)
   end
 
   module Stream_options = struct
-    type t = { include_usage : bool option [@jsonaf.option] } [@@deriving jsonaf, sexp_of]
+    type t = { include_usage : bool option [@jsonaf.option] } [@@deriving jsonaf, sexp]
+
+    let create ?include_usage () = { include_usage }
+  end
+
+  module Audio = struct
+    type t =
+      { voice : string
+      ; format : string
+      }
+    [@@deriving jsonaf, sexp]
+
+    let create ~voice ~format = { voice; format }
+  end
+
+  module Debug = struct
+    type t = { echo_upstream_body : bool option [@jsonaf.option] }
+    [@@deriving jsonaf, sexp]
+
+    let create ?echo_upstream_body () = { echo_upstream_body }
+  end
+
+  module Image_config = struct
+    type t = Jsonaf.t [@@deriving jsonaf, sexp]
+  end
+
+  module Metadata = struct
+    type t = (string * string) list [@@deriving sexp]
+
+    let jsonaf_of_t t = `Object (List.map t ~f:(fun (k, v) -> k, `String v))
+
+    let t_of_jsonaf = function
+      | `Object kvs ->
+        List.map kvs ~f:(fun (k, v) ->
+          match v with
+          | `String s -> k, s
+          | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Expected string metadata value" v)
+      | json -> Jsonaf_kernel.Conv.of_jsonaf_error "Expected object for metadata" json
+    ;;
+  end
+
+  module Trace = struct
+    type t = (string * Jsonaf.t) list [@@deriving sexp]
+
+    let jsonaf_of_t t = `Object t
+
+    let t_of_jsonaf = function
+      | `Object kvs -> kvs
+      | json -> Jsonaf_kernel.Conv.of_jsonaf_error "Expected object for trace" json
+    ;;
+  end
+
+  module Provider = struct
+    module Sort = struct
+      module T = struct
+        type t =
+          | Price
+          | Throughput
+          | Latency
+        [@@deriving equal, sexp, enumerate]
+      end
+
+      include T
+      include Json_helper.Make_string_variant (T)
+    end
+
+    module Data_collection = struct
+      module T = struct
+        type t =
+          | Allow
+          | Deny
+        [@@deriving equal, sexp, enumerate]
+      end
+
+      include T
+      include Json_helper.Make_string_variant (T)
+    end
+
+    module Max_price = struct
+      type t =
+        { prompt : float option [@jsonaf.option]
+        ; completion : float option [@jsonaf.option]
+        ; request : float option [@jsonaf.option]
+        ; image : float option [@jsonaf.option]
+        ; audio : float option [@jsonaf.option]
+        }
+      [@@deriving equal, jsonaf, sexp]
+    end
+
+    type t =
+      { order : string list option [@jsonaf.option]
+      ; allow_fallbacks : bool option [@jsonaf.option]
+      ; require_parameters : bool option [@jsonaf.option]
+      ; data_collection : Data_collection.t option [@jsonaf.option]
+      ; zdr : bool option [@jsonaf.option]
+      ; only : string list option [@jsonaf.option]
+      ; ignore : string list option [@jsonaf.option]
+      ; quantizations : string list option [@jsonaf.option]
+      ; sort : Sort.t option [@jsonaf.option]
+      ; max_price : Max_price.t option [@jsonaf.option]
+      ; preferred_min_throughput : float option [@jsonaf.option]
+      ; preferred_max_latency : float option [@jsonaf.option]
+      ; enforce_distillable_text : bool option [@jsonaf.option]
+      }
+    [@@deriving equal, jsonaf, sexp]
+
+    let empty =
+      { order = None
+      ; allow_fallbacks = None
+      ; require_parameters = None
+      ; data_collection = None
+      ; zdr = None
+      ; only = None
+      ; ignore = None
+      ; quantizations = None
+      ; sort = None
+      ; max_price = None
+      ; preferred_min_throughput = None
+      ; preferred_max_latency = None
+      ; enforce_distillable_text = None
+      }
+    ;;
+
+    let is_empty t = equal t empty
   end
 
   module Logit_bias = struct
-    type t = (string * int) list [@@deriving sexp_of]
+    type t = (string * int) list [@@deriving sexp]
 
     let jsonaf_of_t t =
       `Object (List.map t ~f:(fun (k, v) -> k, `Number (Int.to_string v)))
@@ -486,45 +898,59 @@ module Request = struct
         ; schema : Jsonaf.t option [@jsonaf.option]
         ; description : string option [@jsonaf.option]
         }
-      [@@deriving jsonaf, sexp_of]
+      [@@deriving jsonaf, sexp]
     end
 
-    type t =
-      | Json_object
-      | Json_schema of Json_schema.t
-    [@@deriving sexp_of]
+    module T = struct
+      type t =
+        | Json_object
+        | Json_schema of Json_schema.t
+      [@@deriving sexp, typed_variants]
+
+      let discriminator = "type"
+      let tag = `Infer
+
+      let codec : type a. a Typed_variant.t -> a Json_helper.Tagged_union_codec.t =
+        function
+        | Json_object -> Tag_only
+        | Json_schema ->
+          Json_helper.nested
+            ~key:"json_schema"
+            Json_schema.jsonaf_of_t
+            Json_schema.t_of_jsonaf
+      ;;
+    end
+
+    include T
+    include Json_helper.Make_tagged_union (T)
 
     let json_schema ?strict ?schema ?description ~name () =
       Json_schema { Json_schema.name; strict; schema; description }
     ;;
-
-    let jsonaf_of_t = function
-      | Json_object -> `Object [ "type", `String "json_object" ]
-      | Json_schema schema ->
-        `Object
-          [ "type", `String "json_schema"; "json_schema", Json_schema.jsonaf_of_t schema ]
-    ;;
-
-    let t_of_jsonaf json =
-      match Jsonaf.member "type" json with
-      | Some (`String "json_object") -> Json_object
-      | Some (`String "json_schema") ->
-        (match Jsonaf.member "json_schema" json with
-         | Some s -> Json_schema (Json_schema.t_of_jsonaf s)
-         | None -> Jsonaf_kernel.Conv.of_jsonaf_error "Missing 'json_schema' field" json)
-      | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Unknown response_format type" json
-    ;;
   end
 
-  type t =
+  (* The tag is a purely type-level discriminator that prevents passing a
+     streaming request to the non-streaming entry point (and vice versa);
+     it doesn't appear in the wire format. ppx_jsonaf_conv threads a dummy
+     converter through [jsonaf_of_t]/[sexp_of_t], so call sites that want
+     to serialize go through the [%jsonaf_of: [`Non_streaming] Request.t]
+     extension form. *)
+  type 'tag t =
     { model : string
     ; messages : Message.t list
     ; stream : bool
+    ; cache_control : Cache_control.t option [@jsonaf.option]
+    ; debug : Debug.t option [@jsonaf.option]
     ; reasoning : Reasoning.t option [@jsonaf.option]
     ; tools : Tool.t list [@default []] [@jsonaf_drop_default.equal]
     ; tool_choice : Tool_choice.t option [@jsonaf.option]
     ; parallel_tool_calls : bool option [@jsonaf.option]
     ; plugins : Plugin.t list [@default []] [@jsonaf_drop_default.equal]
+    ; metadata : Metadata.t option [@jsonaf.option]
+    ; user : string option [@jsonaf.option]
+    ; session_id : string option [@jsonaf.option]
+    ; route : string option [@jsonaf.option]
+    ; trace : Trace.t option [@jsonaf.option]
     ; temperature : float option [@jsonaf.option]
     ; top_p : float option [@jsonaf.option]
     ; top_k : int option [@jsonaf.option]
@@ -542,13 +968,286 @@ module Request = struct
     ; top_logprobs : int option [@jsonaf.option]
     ; verbosity : Verbosity.t option [@jsonaf.option]
     ; response_format : Response_format.t option [@jsonaf.option]
+    ; structured_outputs : bool option [@jsonaf.option]
     ; modalities : string list option [@jsonaf.option]
+    ; audio : Audio.t option [@jsonaf.option]
+    ; image_config : Image_config.t option [@jsonaf.option]
     ; stream_options : Stream_options.t option [@jsonaf.option]
     ; service_tier : string option [@jsonaf.option]
     ; models : string list [@default []] [@jsonaf_drop_default.equal]
     ; transforms : string list [@default []] [@jsonaf_drop_default.equal]
+    ; provider : Provider.t option [@jsonaf.option]
     }
-  [@@deriving jsonaf, sexp_of]
+  [@@deriving jsonaf, sexp]
+
+  module Non_streaming = struct
+    type nonrec t = [ `Non_streaming ] t [@@deriving jsonaf, sexp]
+  end
+
+  module Streaming = struct
+    type nonrec t = [ `Streaming ] t [@@deriving jsonaf, sexp]
+  end
+
+  let create_body
+        ~stream
+        ?cache_control
+        ?debug
+        ?reasoning
+        ?(tools = [])
+        ?tool_choice
+        ?parallel_tool_calls
+        ?(plugins = [])
+        ?metadata
+        ?user
+        ?session_id
+        ?route
+        ?trace
+        ?temperature
+        ?top_p
+        ?top_k
+        ?min_p
+        ?top_a
+        ?max_tokens
+        ?max_completion_tokens
+        ?seed
+        ?stop
+        ?frequency_penalty
+        ?presence_penalty
+        ?repetition_penalty
+        ?logit_bias
+        ?logprobs
+        ?top_logprobs
+        ?verbosity
+        ?response_format
+        ?structured_outputs
+        ?modalities
+        ?audio
+        ?image_config
+        ?stream_options
+        ?service_tier
+        ?(models = [])
+        ?(transforms = [])
+        ?provider
+        ~model
+        ~messages
+        ()
+    : 'tag t
+    =
+    { model
+    ; messages
+    ; stream
+    ; cache_control
+    ; debug
+    ; reasoning
+    ; tools
+    ; tool_choice
+    ; parallel_tool_calls
+    ; plugins
+    ; metadata
+    ; user
+    ; session_id
+    ; route
+    ; trace
+    ; temperature
+    ; top_p
+    ; top_k
+    ; min_p
+    ; top_a
+    ; max_tokens
+    ; max_completion_tokens
+    ; seed
+    ; stop
+    ; frequency_penalty
+    ; presence_penalty
+    ; repetition_penalty
+    ; logit_bias
+    ; logprobs
+    ; top_logprobs
+    ; verbosity
+    ; response_format
+    ; structured_outputs
+    ; modalities
+    ; audio
+    ; image_config
+    ; stream_options
+    ; service_tier
+    ; models
+    ; transforms
+    ; provider
+    }
+  ;;
+
+  let create
+        ?cache_control
+        ?reasoning
+        ?tools
+        ?tool_choice
+        ?parallel_tool_calls
+        ?plugins
+        ?metadata
+        ?user
+        ?session_id
+        ?route
+        ?trace
+        ?temperature
+        ?top_p
+        ?top_k
+        ?min_p
+        ?top_a
+        ?max_tokens
+        ?max_completion_tokens
+        ?seed
+        ?stop
+        ?frequency_penalty
+        ?presence_penalty
+        ?repetition_penalty
+        ?logit_bias
+        ?logprobs
+        ?top_logprobs
+        ?verbosity
+        ?response_format
+        ?structured_outputs
+        ?modalities
+        ?image_config
+        ?service_tier
+        ?models
+        ?transforms
+        ?provider
+        ~model
+        ~messages
+        ()
+    : [ `Non_streaming ] t
+    =
+    create_body
+      ~stream:false
+      ?cache_control
+      ?reasoning
+      ?tools
+      ?tool_choice
+      ?parallel_tool_calls
+      ?plugins
+      ?metadata
+      ?user
+      ?session_id
+      ?route
+      ?trace
+      ?temperature
+      ?top_p
+      ?top_k
+      ?min_p
+      ?top_a
+      ?max_tokens
+      ?max_completion_tokens
+      ?seed
+      ?stop
+      ?frequency_penalty
+      ?presence_penalty
+      ?repetition_penalty
+      ?logit_bias
+      ?logprobs
+      ?top_logprobs
+      ?verbosity
+      ?response_format
+      ?structured_outputs
+      ?modalities
+      ?image_config
+      ?service_tier
+      ?models
+      ?transforms
+      ?provider
+      ~model
+      ~messages
+      ()
+  ;;
+
+  let create_streaming
+        ?debug
+        ?audio
+        ?stream_options
+        ?cache_control
+        ?reasoning
+        ?tools
+        ?tool_choice
+        ?parallel_tool_calls
+        ?plugins
+        ?metadata
+        ?user
+        ?session_id
+        ?route
+        ?trace
+        ?temperature
+        ?top_p
+        ?top_k
+        ?min_p
+        ?top_a
+        ?max_tokens
+        ?max_completion_tokens
+        ?seed
+        ?stop
+        ?frequency_penalty
+        ?presence_penalty
+        ?repetition_penalty
+        ?logit_bias
+        ?logprobs
+        ?top_logprobs
+        ?verbosity
+        ?response_format
+        ?structured_outputs
+        ?modalities
+        ?image_config
+        ?service_tier
+        ?models
+        ?transforms
+        ?provider
+        ~model
+        ~messages
+        ()
+    : [ `Streaming ] t
+    =
+    create_body
+      ~stream:true
+      ?cache_control
+      ?debug
+      ?reasoning
+      ?tools
+      ?tool_choice
+      ?parallel_tool_calls
+      ?plugins
+      ?metadata
+      ?user
+      ?session_id
+      ?route
+      ?trace
+      ?temperature
+      ?top_p
+      ?top_k
+      ?min_p
+      ?top_a
+      ?max_tokens
+      ?max_completion_tokens
+      ?seed
+      ?stop
+      ?frequency_penalty
+      ?presence_penalty
+      ?repetition_penalty
+      ?logit_bias
+      ?logprobs
+      ?top_logprobs
+      ?verbosity
+      ?response_format
+      ?structured_outputs
+      ?modalities
+      ?audio
+      ?image_config
+      ?stream_options
+      ?service_tier
+      ?models
+      ?transforms
+      ?provider
+      ~model
+      ~messages
+      ()
+  ;;
 end
 
 (* Per-token logprobs returned in [choices[].logprobs] when [logprobs = true] is
@@ -561,7 +1260,7 @@ module Logprobs = struct
       ; logprob : float
       ; bytes : int list option [@default None]
       }
-    [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
   end
 
   module Token = struct
@@ -571,14 +1270,14 @@ module Logprobs = struct
       ; bytes : int list option [@default None]
       ; top_logprobs : Top_logprob.t list [@default []]
       }
-    [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
   end
 
   type t =
     { content : Token.t list option [@default None]
     ; refusal : Token.t list option [@default None]
     }
-  [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+  [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 end
 
 module Response = struct
@@ -590,7 +1289,7 @@ module Response = struct
         ; audio_tokens : int option [@default None]
         ; video_tokens : int option [@default None]
         }
-      [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
     end
 
     module Cost_details = struct
@@ -599,7 +1298,7 @@ module Response = struct
         ; upstream_inference_prompt_cost : float option [@default None]
         ; upstream_inference_completions_cost : float option [@default None]
         }
-      [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
     end
 
     module Completion_tokens_details = struct
@@ -608,12 +1307,12 @@ module Response = struct
         ; image_tokens : int option [@default None]
         ; audio_tokens : int option [@default None]
         }
-      [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
     end
 
     module Server_tool_use = struct
       type t = { web_search_requests : int option [@default None] }
-      [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
     end
 
     type t =
@@ -627,7 +1326,7 @@ module Response = struct
       ; completion_tokens_details : Completion_tokens_details.t option [@default None]
       ; server_tool_use : Server_tool_use.t option [@default None]
       }
-    [@@deriving of_jsonaf, sexp_of, fields ~getters] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp, fields ~getters] [@@jsonaf.allow_extra_fields]
   end
 
   module Choice = struct
@@ -638,7 +1337,7 @@ module Response = struct
       ; index : int
       ; message : Message.t
       }
-    [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 
     module Elide_image = struct
       type nonrec t = t =
@@ -648,7 +1347,7 @@ module Response = struct
         ; index : int
         ; message : Message.Elide_image.t
         }
-      [@@deriving sexp_of]
+      [@@deriving sexp]
     end
   end
 
@@ -663,7 +1362,7 @@ module Response = struct
     ; service_tier : string option [@default None]
     ; usage : Usage.t
     }
-  [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+  [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 
   module Elide_image = struct
     type nonrec t = t =
@@ -677,7 +1376,7 @@ module Response = struct
       ; service_tier : string option
       ; usage : Usage.t
       }
-    [@@deriving sexp_of]
+    [@@deriving sexp]
   end
 end
 
@@ -688,7 +1387,7 @@ module Stream_chunk = struct
         { name : string option [@default None] [@jsonaf_drop_default.equal]
         ; arguments : string option [@default None] [@jsonaf_drop_default.equal]
         }
-      [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
     end
 
     type t =
@@ -698,13 +1397,15 @@ module Stream_chunk = struct
       ; function_ : Function_call.t option
             [@default None] [@jsonaf_drop_default.equal] [@key "function"]
       }
-    [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
   end
 
   module Delta = struct
     type t =
       { role : string option [@default None] [@jsonaf_drop_default.equal]
       ; content : string option [@default None] [@jsonaf_drop_default.equal]
+      ; audio : Audio_output.t option
+            [@default None] [@jsonaf_drop_default.equal] [@sexp_drop_default.equal]
       ; refusal : string option [@default None] [@jsonaf_drop_default.equal]
       ; reasoning : string option [@default None] [@jsonaf_drop_default.equal]
       ; reasoning_details : Reasoning_detail.t list
@@ -716,12 +1417,13 @@ module Stream_chunk = struct
             [@default []] [@jsonaf_drop_default.equal]
       ; tool_calls : Tool_call_chunk.t list [@default []] [@jsonaf_drop_default.equal]
       }
-    [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 
     module Elide_image = struct
       type nonrec t = t =
         { role : string option
         ; content : string option
+        ; audio : Audio_output.t option
         ; refusal : string option
         ; reasoning : string option
         ; reasoning_details : Reasoning_detail.t list
@@ -729,7 +1431,7 @@ module Stream_chunk = struct
         ; annotations : Jsonaf.t list
         ; tool_calls : Tool_call_chunk.t list
         }
-      [@@deriving sexp_of]
+      [@@deriving sexp]
     end
   end
 
@@ -740,8 +1442,17 @@ module Stream_chunk = struct
       ; native_finish_reason : string option
       ; index : int
       ; delta : Delta.t
+      ; error : Jsonaf.t option [@default None]
+        (* When the upstream provider fails after generation has begun, the
+           final chunk may carry [finish_reason = "error"] and an [error]
+           object. We keep this as raw JSON since OpenRouter doesn't document
+           a stable schema for it. *)
       }
-    [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+
+    (** [true] when this chunk represents a mid-stream upstream failure (i.e.
+        [finish_reason = "error"]). *)
+    let is_error t = [%equal: string option] t.finish_reason (Some "error")
   end
 
   type t =
@@ -753,15 +1464,18 @@ module Stream_chunk = struct
     ; choices : Choice.t list
     ; system_fingerprint : string option [@default None]
     ; service_tier : string option [@default None]
+    ; debug : Jsonaf.t option [@default None] [@sexp_drop_if Option.is_none]
     ; usage : Response.Usage.t option [@jsonaf.option]
     }
-  [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+  [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 end
 
-let create ~api_key ?app_info ?on_response_body (request : Request.t) =
+let create ~api_key ?app_info ?on_response_body (request : [ `Non_streaming ] Request.t) =
   let headers = Http.make_headers ~api_key ?app_info () in
   let body =
-    [%jsonaf_of: Request.t] request |> Jsonaf.to_string |> Cohttp_async.Body.of_string
+    [%jsonaf_of: [ `Non_streaming ] Request.t] request
+    |> Jsonaf.to_string
+    |> Cohttp_async.Body.of_string
   in
   let%bind response, body = Cohttp_async.Client.post ~headers ~body endpoint_url in
   let%bind body_string = Cohttp_async.Body.to_string body in
@@ -822,10 +1536,13 @@ let lines_of_chunks (chunks : string Pipe.Reader.t) : string Pipe.Reader.t =
           | line -> Pipe.write writer line)))
 ;;
 
-let create_stream ~api_key ?app_info ?on_stream_chunk (request : Request.t) =
+let create_stream ~api_key ?app_info ?on_stream_chunk (request : [ `Streaming ] Request.t)
+  =
   let headers = Http.make_headers ~api_key ?app_info () in
   let body =
-    [%jsonaf_of: Request.t] request |> Jsonaf.to_string |> Cohttp_async.Body.of_string
+    [%jsonaf_of: [ `Streaming ] Request.t] request
+    |> Jsonaf.to_string
+    |> Cohttp_async.Body.of_string
   in
   let%bind response, body = Cohttp_async.Client.post ~headers ~body endpoint_url in
   match Http.is_success_status response with
@@ -907,434 +1624,20 @@ module For_testing = struct
   let stream_chunk_of_jsonaf = [%of_jsonaf: Stream_chunk.t]
 end
 
-let%expect_test "request" =
-  [%jsonaf_of: Request.t]
-    { model = "openai/gpt-4o"
-    ; messages = [ Request.Message.user "Hello, world!" ]
-    ; stream = false
-    ; reasoning = None
-    ; tools = []
-    ; tool_choice = None
-    ; parallel_tool_calls = None
-    ; plugins = []
-    ; temperature = None
-    ; top_p = None
-    ; top_k = None
-    ; min_p = None
-    ; top_a = None
-    ; max_tokens = None
-    ; max_completion_tokens = None
-    ; seed = None
-    ; stop = None
-    ; frequency_penalty = None
-    ; presence_penalty = None
-    ; repetition_penalty = None
-    ; logit_bias = None
-    ; logprobs = None
-    ; top_logprobs = None
-    ; verbosity = None
-    ; response_format = None
-    ; modalities = None
-    ; stream_options = None
-    ; service_tier = None
-    ; models = []
-    ; transforms = []
-    }
-  |> Jsonaf.to_string_hum
-  |> print_endline;
-  [%expect
-    {|
-    {
-      "model": "openai/gpt-4o",
-      "messages": [
-        {
-          "role": "user",
-          "content": "Hello, world!"
-        }
-      ],
-      "stream": false
-    }
-    |}];
+let%expect_test "Reasoning.create rejects effort + max_tokens together" =
+  Request.Reasoning.create ~effort:Low ~max_tokens:200 ()
+  |> [%sexp_of: Request.Reasoning.t Or_error.t]
+  |> print_s;
+  [%expect {| (Error "Reasoning: effort and max_tokens are mutually exclusive") |}];
   Deferred.unit
 ;;
 
-let%expect_test "request with tools" =
-  let search_tool =
-    Tool.create
-      ~name:"search_books"
-      ~description:"Search for books in a library"
-      ~parameters:
-        (`Object
-            [ "type", `String "object"
-            ; ( "properties"
-              , `Object
-                  [ ( "query"
-                    , `Object
-                        [ "type", `String "string"
-                        ; "description", `String "Search query"
-                        ] )
-                  ] )
-            ; "required", `Array [ `String "query" ]
-            ])
-      ()
-  in
-  [%jsonaf_of: Request.t]
-    { model = "google/gemini-2.0-flash-001"
-    ; messages = [ Request.Message.user "Find books about OCaml" ]
-    ; stream = false
-    ; reasoning = None
-    ; tools = [ search_tool ]
-    ; tool_choice = Some Tool_choice.auto
-    ; parallel_tool_calls = None
-    ; plugins = []
-    ; temperature = None
-    ; top_p = None
-    ; top_k = None
-    ; min_p = None
-    ; top_a = None
-    ; max_tokens = None
-    ; max_completion_tokens = None
-    ; seed = None
-    ; stop = None
-    ; frequency_penalty = None
-    ; presence_penalty = None
-    ; repetition_penalty = None
-    ; logit_bias = None
-    ; logprobs = None
-    ; top_logprobs = None
-    ; verbosity = None
-    ; response_format = None
-    ; modalities = None
-    ; stream_options = None
-    ; service_tier = None
-    ; models = []
-    ; transforms = []
-    }
-  |> Jsonaf.to_string_hum
-  |> print_endline;
-  [%expect
-    {|
-    {
-      "model": "google/gemini-2.0-flash-001",
-      "messages": [
-        {
-          "role": "user",
-          "content": "Find books about OCaml"
-        }
-      ],
-      "stream": false,
-      "tools": [
-        {
-          "type": "function",
-          "function": {
-            "name": "search_books",
-            "description": "Search for books in a library",
-            "parameters": {
-              "type": "object",
-              "properties": {
-                "query": {
-                  "type": "string",
-                  "description": "Search query"
-                }
-              },
-              "required": [
-                "query"
-              ]
-            }
-          }
-        }
-      ],
-      "tool_choice": "auto"
-    }
-    |}];
-  Deferred.unit
-;;
-
-let%expect_test "tool result message" =
-  [%jsonaf_of: Request.t]
-    { model = "openai/gpt-4o"
-    ; messages =
-        [ Request.Message.user "Find books about OCaml"
-        ; Request.Message.assistant
-            ~tool_calls:
-              [ { id = "call_abc123"
-                ; type_ = "function"
-                ; function_ =
-                    { name = "search_books"; arguments = {|{"query": "OCaml"}|} }
-                }
-              ]
-            ()
-        ; Request.Message.tool
-            ~tool_call_id:"call_abc123"
-            ~content:{|[{"title": "Real World OCaml", "author": "Yaron Minsky"}]|}
-        ]
-    ; stream = false
-    ; reasoning = None
-    ; tools = []
-    ; tool_choice = None
-    ; parallel_tool_calls = None
-    ; plugins = []
-    ; temperature = None
-    ; top_p = None
-    ; top_k = None
-    ; min_p = None
-    ; top_a = None
-    ; max_tokens = None
-    ; max_completion_tokens = None
-    ; seed = None
-    ; stop = None
-    ; frequency_penalty = None
-    ; presence_penalty = None
-    ; repetition_penalty = None
-    ; logit_bias = None
-    ; logprobs = None
-    ; top_logprobs = None
-    ; verbosity = None
-    ; response_format = None
-    ; modalities = None
-    ; stream_options = None
-    ; service_tier = None
-    ; models = []
-    ; transforms = []
-    }
-  |> Jsonaf.to_string_hum
-  |> print_endline;
-  [%expect
-    {|
-    {
-      "model": "openai/gpt-4o",
-      "messages": [
-        {
-          "role": "user",
-          "content": "Find books about OCaml"
-        },
-        {
-          "role": "assistant",
-          "tool_calls": [
-            {
-              "id": "call_abc123",
-              "type": "function",
-              "function": {
-                "name": "search_books",
-                "arguments": "{\"query\": \"OCaml\"}"
-              }
-            }
-          ]
-        },
-        {
-          "role": "tool",
-          "content": "[{\"title\": \"Real World OCaml\", \"author\": \"Yaron Minsky\"}]",
-          "tool_call_id": "call_abc123"
-        }
-      ],
-      "stream": false
-    }
-    |}];
-  Deferred.unit
-;;
-
-let%expect_test "request with web search plugin" =
-  [%jsonaf_of: Request.t]
-    { model = "openai/gpt-4o"
-    ; messages = [ Request.Message.user "What's happening in AI today?" ]
-    ; stream = true
-    ; reasoning = None
-    ; tools = []
-    ; tool_choice = None
-    ; parallel_tool_calls = None
-    ; plugins = [ Plugin.web () ]
-    ; temperature = None
-    ; top_p = None
-    ; top_k = None
-    ; min_p = None
-    ; top_a = None
-    ; max_tokens = None
-    ; max_completion_tokens = None
-    ; seed = None
-    ; stop = None
-    ; frequency_penalty = None
-    ; presence_penalty = None
-    ; repetition_penalty = None
-    ; logit_bias = None
-    ; logprobs = None
-    ; top_logprobs = None
-    ; verbosity = None
-    ; response_format = None
-    ; modalities = None
-    ; stream_options = None
-    ; service_tier = None
-    ; models = []
-    ; transforms = []
-    }
-  |> Jsonaf.to_string_hum
-  |> print_endline;
-  [%expect
-    {|
-    {
-      "model": "openai/gpt-4o",
-      "messages": [
-        {
-          "role": "user",
-          "content": "What's happening in AI today?"
-        }
-      ],
-      "stream": true,
-      "plugins": [
-        {
-          "id": "web"
-        }
-      ]
-    }
-    |}];
-  Deferred.unit
-;;
-
-let%expect_test "request with file attachment" =
-  [%jsonaf_of: Request.t]
-    { model = "anthropic/claude-sonnet-4"
-    ; messages =
-        [ Request.Message.user_multipart
-            [ Request.Message.Content_part.text
-                "What are the main points in this document?"
-            ; Request.Message.Content_part.file
-                ~filename:"document.pdf"
-                ~file_data:"https://bitcoin.org/bitcoin.pdf"
-            ]
-        ]
-    ; stream = false
-    ; reasoning = None
-    ; tools = []
-    ; tool_choice = None
-    ; parallel_tool_calls = None
-    ; plugins = []
-    ; temperature = None
-    ; top_p = None
-    ; top_k = None
-    ; min_p = None
-    ; top_a = None
-    ; max_tokens = None
-    ; max_completion_tokens = None
-    ; seed = None
-    ; stop = None
-    ; frequency_penalty = None
-    ; presence_penalty = None
-    ; repetition_penalty = None
-    ; logit_bias = None
-    ; logprobs = None
-    ; top_logprobs = None
-    ; verbosity = None
-    ; response_format = None
-    ; modalities = None
-    ; stream_options = None
-    ; service_tier = None
-    ; models = []
-    ; transforms = []
-    }
-  |> Jsonaf.to_string_hum
-  |> print_endline;
-  [%expect
-    {|
-    {
-      "model": "anthropic/claude-sonnet-4",
-      "messages": [
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "text",
-              "text": "What are the main points in this document?"
-            },
-            {
-              "type": "file",
-              "file": {
-                "filename": "document.pdf",
-                "file_data": "https://bitcoin.org/bitcoin.pdf"
-              }
-            }
-          ]
-        }
-      ],
-      "stream": false
-    }
-    |}];
-  Deferred.unit
-;;
-
-let%expect_test "request with file-parser plugin" =
-  [%jsonaf_of: Request.t]
-    { model = "anthropic/claude-sonnet-4"
-    ; messages =
-        [ Request.Message.user_multipart
-            [ Request.Message.Content_part.text "Summarize this PDF"
-            ; Request.Message.Content_part.file
-                ~filename:"document.pdf"
-                ~file_data:"data:application/pdf;base64,JVBERi0xLjQ..."
-            ]
-        ]
-    ; stream = false
-    ; reasoning = None
-    ; tools = []
-    ; tool_choice = None
-    ; parallel_tool_calls = None
-    ; plugins = [ Plugin.file_parser ~pdf_engine:Mistral_ocr () ]
-    ; temperature = None
-    ; top_p = None
-    ; top_k = None
-    ; min_p = None
-    ; top_a = None
-    ; max_tokens = None
-    ; max_completion_tokens = None
-    ; seed = None
-    ; stop = None
-    ; frequency_penalty = None
-    ; presence_penalty = None
-    ; repetition_penalty = None
-    ; logit_bias = None
-    ; logprobs = None
-    ; top_logprobs = None
-    ; verbosity = None
-    ; response_format = None
-    ; modalities = None
-    ; stream_options = None
-    ; service_tier = None
-    ; models = []
-    ; transforms = []
-    }
-  |> Jsonaf.to_string_hum
-  |> print_endline;
-  [%expect
-    {|
-    {
-      "model": "anthropic/claude-sonnet-4",
-      "messages": [
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "text",
-              "text": "Summarize this PDF"
-            },
-            {
-              "type": "file",
-              "file": {
-                "filename": "document.pdf",
-                "file_data": "data:application/pdf;base64,JVBERi0xLjQ..."
-              }
-            }
-          ]
-        }
-      ],
-      "stream": false,
-      "plugins": [
-        {
-          "id": "file-parser",
-          "pdf": {
-            "engine": "mistral-ocr"
-          }
-        }
-      ]
-    }
-    |}];
+let%expect_test "Provider.is_empty: empty <-> non-empty" =
+  let open Request.Provider in
+  print_s [%sexp (is_empty empty : bool)];
+  [%expect {| true |}];
+  print_s [%sexp (is_empty { empty with sort = Some Sort.Price } : bool)];
+  [%expect {| false |}];
   Deferred.unit
 ;;
 

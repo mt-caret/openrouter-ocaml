@@ -9,7 +9,7 @@ module Request = struct
     type t =
       | Single of string
       | Multi of string list
-    [@@deriving sexp_of, variants]
+    [@@deriving sexp, variants]
 
     let jsonaf_of_t = function
       | Single s -> `String s
@@ -33,7 +33,7 @@ module Request = struct
     ; input : Input.t
     ; dimensions : int option [@jsonaf.option]
     }
-  [@@deriving jsonaf, sexp_of]
+  [@@deriving jsonaf, sexp]
 end
 
 module Response = struct
@@ -43,7 +43,7 @@ module Response = struct
       ; index : int
       ; embedding : float list
       }
-    [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
   end
 
   module Usage = struct
@@ -52,7 +52,7 @@ module Response = struct
       ; total_tokens : int
       ; cost : float option [@default None]
       }
-    [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
   end
 
   type t =
@@ -63,7 +63,7 @@ module Response = struct
     ; provider : string option [@default None]
     ; id : string option [@default None]
     }
-  [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+  [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 end
 
 let create ~api_key ?app_info ?on_response_body (request : Request.t) =

@@ -2,30 +2,6 @@ open! Core
 open! Async
 open! Openrouter_api
 
-(** Detect MIME type from file extension *)
-let mime_type_of_extension ext =
-  match String.lowercase ext with
-  | ".pdf" -> Some "application/pdf"
-  | ".png" -> Some "image/png"
-  | ".jpg" | ".jpeg" -> Some "image/jpeg"
-  | ".gif" -> Some "image/gif"
-  | ".webp" -> Some "image/webp"
-  | _ -> None
-;;
-
-(** Read a file and return its content as a base64-encoded data URL *)
-let read_file_as_data_url path =
-  let ext = Filename.split_extension path |> snd |> Option.value ~default:"" in
-  let ext = if String.is_prefix ext ~prefix:"." then ext else "." ^ ext in
-  match mime_type_of_extension ext with
-  | None -> Deferred.Or_error.errorf "Unsupported file type: %s" ext
-  | Some mime_type ->
-    let%bind content = Reader.file_contents path in
-    let base64 = Base64.encode_exn content in
-    let data_url = sprintf "data:%s;base64,%s" mime_type base64 in
-    Deferred.Or_error.return (mime_type, data_url)
-;;
-
 let api_key_from_env () =
   Sys.getenv "OPENROUTER_API_KEY"
   |> Result.of_option ~error:(Error.of_string "OPENROUTER_API_KEY not set")
@@ -37,291 +13,40 @@ let default_model = "anthropic/claude-opus-4.7"
 let chat_command =
   Command.async_or_error
     ~summary:"Send a chat completion request"
-    (let%map_open.Command model =
-       flag
-         "model"
-         (optional_with_default default_model string)
-         ~doc:[%string "MODEL model to use (default: %{default_model})"]
-     and no_stream =
-       flag "no-stream" no_arg ~doc:" disable streaming (use non-streaming API)"
-     and reasoning_tokens =
-       flag
-         "reasoning"
-         (optional int)
-         ~doc:"TOKENS enable reasoning with max tokens budget"
-     and reasoning_effort =
-       flag
-         "reasoning-effort"
-         (optional string)
-         ~doc:
-           "EFFORT reasoning effort (xhigh|high|medium|low|minimal|none); mutually \
-            exclusive with -reasoning"
-     and reasoning_exclude =
-       flag "reasoning-exclude" no_arg ~doc:" hide reasoning from response output"
-     and web_search = flag "web-search" no_arg ~doc:" enable web search plugin"
-     and files = flag "file" (listed string) ~doc:"PATH attach a file (PDF or image)"
-     and temperature =
-       flag "temperature" (optional float) ~doc:"FLOAT sampling temperature"
-     and top_p = flag "top-p" (optional float) ~doc:"FLOAT nucleus sampling cutoff"
-     and top_k = flag "top-k" (optional int) ~doc:"N top-k sampling cutoff"
-     and min_p = flag "min-p" (optional float) ~doc:"FLOAT min-p sampling cutoff"
-     and top_a = flag "top-a" (optional float) ~doc:"FLOAT top-a sampling cutoff"
-     and max_tokens = flag "max-tokens" (optional int) ~doc:"N max tokens in completion"
-     and max_completion_tokens =
-       flag
-         "max-completion-tokens"
-         (optional int)
-         ~doc:"N max completion tokens (modern alias for -max-tokens)"
-     and seed = flag "seed" (optional int) ~doc:"N RNG seed for reproducibility"
-     and stop =
-       flag "stop" (listed string) ~doc:"STR stop sequence (may be repeated, up to 4)"
-     and frequency_penalty =
-       flag "frequency-penalty" (optional float) ~doc:"FLOAT frequency penalty"
-     and presence_penalty =
-       flag "presence-penalty" (optional float) ~doc:"FLOAT presence penalty"
-     and repetition_penalty =
-       flag "repetition-penalty" (optional float) ~doc:"FLOAT repetition penalty"
-     and logprobs = flag "logprobs" no_arg ~doc:" return token logprobs"
-     and top_logprobs =
-       flag "top-logprobs" (optional int) ~doc:"N return top-N logprobs per token"
-     and verbosity =
-       flag
-         "verbosity"
-         (optional string)
-         ~doc:"LEVEL completion verbosity (low|medium|high|xhigh|max)"
-     and modalities =
-       flag
-         "modality"
-         (listed string)
-         ~doc:"NAME enable response modality (e.g. text, image; may be repeated)"
-     and include_usage =
-       flag "stream-usage" no_arg ~doc:" include final usage chunk in streaming responses"
-     and service_tier =
-       flag
-         "service-tier"
-         (optional string)
-         ~doc:"TIER service tier (e.g. auto, default, flex, priority)"
-     and fallback_models =
-       flag
-         "fallback-model"
-         (listed string)
-         ~doc:"MODEL fallback model id, in priority order (may be repeated)"
-     and transforms =
-       flag
-         "transform"
-         (listed string)
-         ~doc:"NAME message transform (e.g. middle-out; may be repeated)"
-     and json =
-       flag "json" no_arg ~doc:" force JSON object output (response_format=json_object)"
-     and json_schema_file =
-       flag
-         "json-schema"
-         (optional Filename_unix.arg_type)
-         ~doc:"FILE force output matching the JSON schema in FILE"
-     and app_referer =
-       flag
-         "app-referer"
-         (optional string)
-         ~doc:"URL value for HTTP-Referer header (app attribution)"
-     and app_title =
-       flag
-         "app-title"
-         (optional string)
-         ~doc:"NAME value for X-Title header (app attribution)"
-     and app_cache =
-       flag
-         "app-cache"
-         no_arg
-         ~doc:" send X-OpenRouter-Cache: true to opt into response caching"
-     and app_experimental_metadata =
-       flag
-         "app-experimental-metadata"
-         no_arg
-         ~doc:" send X-OpenRouter-Experimental-Metadata: enabled"
-     and log_response_to =
-       flag
-         "log-response-to"
-         (optional Filename_unix.arg_type)
-         ~doc:
-           "PATH write the raw JSON response body to PATH (non-streaming only); useful \
-            for capturing test fixtures"
-     and log_stream_to =
-       flag
-         "log-stream-to"
-         (optional Filename_unix.arg_type)
-         ~doc:
-           "PATH write each raw stream chunk JSON to PATH as one line (streaming only); \
-            useful for capturing test fixtures"
-     and message = anon (maybe ("MESSAGE" %: string))
+    (let%map_open.Command config = Chat_options.param ~default_model
      and () = Log.Global.set_level_via_param () in
      fun () ->
-       let%bind.Deferred.Or_error api_key = api_key_from_env () in
-       let%bind message =
-         match message with
-         | Some message -> return message
-         | None -> Reader.contents (force Reader.stdin)
+       let%bind.Deferred.Or_error api_key = api_key_from_env ()
+       and { request; app_info; logging = { request_to; stream_to; response_to } } =
+         Deferred.return config
        in
-       let%bind.Deferred.Or_error response_format =
-         match json, json_schema_file with
-         | true, Some _ ->
-           Deferred.Or_error.error_string "cannot pass both -json and -json-schema"
-         | true, None ->
-           Deferred.Or_error.return (Some Completions.Request.Response_format.Json_object)
-         | false, Some path ->
-           let%map contents = Reader.file_contents path in
-           let%map.Or_error schema = Jsonaf.parse contents in
-           let name = Filename.basename path |> Filename.chop_extension in
-           Some
-             (Completions.Request.Response_format.json_schema
-                ~name
-                ~strict:true
-                ~schema
-                ())
-         | false, None -> Deferred.Or_error.return None
-       in
-       let stream = not no_stream in
-       let parse_string_variant of_string ~flag s =
-         Or_error.try_with (fun () -> of_string s)
-         |> Or_error.tag_s
-              ~tag:[%message "invalid flag value" (flag : string) (s : string)]
-       in
-       let%bind.Deferred.Or_error reasoning =
-         Deferred.return
-           (match reasoning_tokens, reasoning_effort, reasoning_exclude with
-            | None, None, false -> Ok None
-            | Some _, Some _, _ ->
-              Or_error.error_string "cannot pass both -reasoning and -reasoning-effort"
-            | max_tokens, effort, exclude ->
-              let%map.Or_error effort =
-                match effort with
-                | None -> Ok None
-                | Some s ->
-                  parse_string_variant
-                    Completions.Request.Reasoning.Effort.of_string
-                    ~flag:"-reasoning-effort"
-                    s
-                  |> Or_error.map ~f:Option.some
-              in
-              Some
-                { Completions.Request.Reasoning.effort
-                ; max_tokens
-                ; exclude = (if exclude then Some true else None)
-                ; enabled = None
-                })
-       in
-       let%bind.Deferred.Or_error verbosity =
-         Deferred.return
-           (match verbosity with
-            | None -> Ok None
-            | Some s ->
-              parse_string_variant
-                Completions.Request.Verbosity.of_string
-                ~flag:"-verbosity"
-                s
-              |> Or_error.map ~f:Option.some)
-       in
-       let stream_options =
-         match include_usage with
-         | true -> Some { Completions.Request.Stream_options.include_usage = Some true }
-         | false -> None
-       in
-       let plugins =
-         match web_search with
-         | true -> [ Completions.Plugin.web () ]
-         | false -> []
-       in
-       let app_info =
-         Http.App_info.create
-           ?http_referer:app_referer
-           ?x_title:app_title
-           ~cache:app_cache
-           ~experimental_metadata:app_experimental_metadata
-           ()
-       in
-       (* Build message - use multipart if files are attached *)
-       let%bind.Deferred.Or_error user_message =
-         match files with
-         | [] -> Deferred.Or_error.return (Completions.Request.Message.user message)
-         | _ ->
-           (* Read all files and build content parts *)
-           let%bind.Deferred.Or_error file_parts =
-             Deferred.Or_error.List.map files ~how:`Sequential ~f:(fun path ->
-               let%bind.Deferred.Or_error mime_type, data_url =
-                 read_file_as_data_url path
-               in
-               let filename = Filename.basename path in
-               (* Use file content part for PDFs, image for images *)
-               if String.is_prefix mime_type ~prefix:"image/"
-               then (
-                 (* Extract base64 data from data URL for images *)
-                 let data =
-                   String.chop_prefix_exn
-                     data_url
-                     ~prefix:(sprintf "data:%s;base64," mime_type)
-                 in
-                 Deferred.Or_error.return
-                   (Completions.Request.Message.Content_part.image_base64
-                      ~mime_type
-                      ~data))
-               else
-                 Deferred.Or_error.return
-                   (Completions.Request.Message.Content_part.file
-                      ~filename
-                      ~file_data:data_url))
-           in
-           let text_part = Completions.Request.Message.Content_part.text message in
-           let all_parts = text_part :: file_parts in
-           Deferred.Or_error.return (Completions.Request.Message.user_multipart all_parts)
-       in
-       let request : Completions.Request.t =
-         { model
-         ; messages = [ user_message ]
-         ; stream
-         ; reasoning
-         ; tools = []
-         ; tool_choice = None
-         ; parallel_tool_calls = None
-         ; plugins
-         ; temperature
-         ; top_p
-         ; top_k
-         ; min_p
-         ; top_a
-         ; max_tokens
-         ; max_completion_tokens
-         ; seed
-         ; stop = (if List.is_empty stop then None else Some stop)
-         ; frequency_penalty
-         ; presence_penalty
-         ; repetition_penalty
-         ; logit_bias = None
-         ; logprobs = (if logprobs then Some true else None)
-         ; top_logprobs
-         ; verbosity
-         ; response_format
-         ; modalities = (if List.is_empty modalities then None else Some modalities)
-         ; stream_options
-         ; service_tier
-         ; models = fallback_models
-         ; transforms
-         }
-       in
-       match stream with
-       | true ->
-         let%bind log_writer =
-           match log_stream_to with
+       match%bind.Deferred.Or_error Chat_options.Request.resolve request with
+       | Streaming request ->
+         let%bind () =
+           match request_to with
+           | None -> return ()
+           | Some path ->
+             Writer.save
+               path
+               ~contents:
+                 ([%jsonaf_of: [ `Streaming ] Completions.Request.t] request
+                  |> Jsonaf.to_string_hum)
+         and log_writer =
+           match stream_to with
            | None -> return None
            | Some path ->
              let%map w = Writer.open_file path in
              Some w
          in
-         let on_stream_chunk =
-           Option.map log_writer ~f:(fun w chunk ->
-             Writer.write_line w chunk;
-             Writer.flushed w)
-         in
          let%bind () =
-           Completions.create_stream ~api_key ~app_info ?on_stream_chunk request
+           Completions.create_stream
+             ~api_key
+             ~app_info
+             ?on_stream_chunk:
+               (Option.map log_writer ~f:(fun w chunk ->
+                  Writer.write_line w chunk;
+                  Writer.flushed w))
+             request
            >>= Pipe.iter ~f:(fun chunk_result ->
              match chunk_result with
              | Error err ->
@@ -329,7 +54,6 @@ let chat_command =
                return ()
              | Ok (chunk : Completions.Stream_chunk.t) ->
                Deferred.List.iter chunk.choices ~how:`Sequential ~f:(fun choice ->
-                 (* Print text content *)
                  let%bind () =
                    match choice.delta.content with
                    | None -> return ()
@@ -337,21 +61,21 @@ let chat_command =
                      print_string content;
                      Writer.flushed (force Writer.stdout)
                  in
-                 (* Print image placeholders *)
                  let%bind () =
                    Deferred.List.iter choice.delta.images ~how:`Sequential ~f:(fun img ->
                      printf "\n<image: %d bytes>\n" (String.length img.image_url.url);
                      Writer.flushed (force Writer.stdout))
                  in
-                 (* Print citations from web search *)
-                 let citations =
-                   List.filter_map choice.delta.annotations ~f:(fun ann ->
-                     Completions.Citation.of_annotation_jsonaf ann)
-                 in
-                 Deferred.List.iter citations ~how:`Sequential ~f:(fun citation ->
-                   let title = Option.value citation.title ~default:citation.url in
-                   printf "\n📎 [%s](%s)\n" title citation.url;
-                   Writer.flushed (force Writer.stdout))))
+                 Deferred.List.iter
+                   (List.filter_map choice.delta.annotations ~f:(fun ann ->
+                      Completions.Citation.of_annotation_jsonaf ann))
+                   ~how:`Sequential
+                   ~f:(fun citation ->
+                     printf
+                       "\n📎 [%s](%s)\n"
+                       (Option.value citation.title ~default:citation.url)
+                       citation.url;
+                     Writer.flushed (force Writer.stdout))))
          in
          let%bind () =
            match log_writer with
@@ -360,13 +84,25 @@ let chat_command =
          in
          print_endline "";
          Deferred.Or_error.return ()
-       | false ->
-         let on_response_body =
-           Option.map log_response_to ~f:(fun path body ->
-             Writer.save path ~contents:body)
+       | Non_streaming request ->
+         let%bind () =
+           match request_to with
+           | None -> return ()
+           | Some path ->
+             Writer.save
+               path
+               ~contents:
+                 ([%jsonaf_of: [ `Non_streaming ] Completions.Request.t] request
+                  |> Jsonaf.to_string_hum)
          in
          let%bind response =
-           Completions.create ~api_key ~app_info ?on_response_body request
+           Completions.create
+             ~api_key
+             ~app_info
+             ?on_response_body:
+               (Option.map response_to ~f:(fun path body ->
+                  Writer.save path ~contents:body))
+             request
          in
          [%sexp_of: Completions.Response.Elide_image.t Or_error.t] response
          |> Sexp.to_string_hum
@@ -386,11 +122,13 @@ let list_models_command =
      and () = Log.Global.set_level_via_param () in
      fun () ->
        let%bind.Deferred.Or_error api_key = api_key_from_env () in
-       let on_response_body =
-         Option.map log_response_to ~f:(fun path body -> Writer.save path ~contents:body)
-       in
        let%map.Deferred.Or_error { data = models } =
-         Models.list ~api_key ?on_response_body ()
+         Models.list
+           ~api_key
+           ?on_response_body:
+             (Option.map log_response_to ~f:(fun path body ->
+                Writer.save path ~contents:body))
+           ()
          |> Deferred.Or_error.tag_s_lazy ~tag:(lazy [%message "Error fetching models"])
        in
        match sexp with
@@ -458,27 +196,31 @@ let embeddings_command =
          ~doc:"PATH write the raw JSON response body to PATH"
      and () = Log.Global.set_level_via_param () in
      fun () ->
-       let%bind.Deferred.Or_error api_key = api_key_from_env () in
-       let%bind inputs =
-         match inputs with
-         | _ :: _ -> return inputs
-         | [] ->
-           let%map contents = Reader.contents (force Reader.stdin) in
-           String.split_lines contents
-           |> List.filter ~f:(fun line -> not (String.is_empty (String.strip line)))
-       in
-       let input =
-         match inputs with
-         | [ s ] -> Embeddings.Request.Input.Single s
-         | xs -> Multi xs
-       in
-       let on_response_body =
-         Option.map log_response_to ~f:(fun path body -> Writer.save path ~contents:body)
+       let%bind.Deferred.Or_error api_key = api_key_from_env ()
+       and inputs =
+         (match inputs with
+          | _ :: _ -> return inputs
+          | [] ->
+            let%map contents = Reader.contents (force Reader.stdin) in
+            String.split_lines contents
+            |> List.filter ~f:(fun line -> not (String.is_empty (String.strip line))))
+         >>| Or_error.return
        in
        let%map.Deferred.Or_error
            ({ object_ = _; model; data; usage; provider = _; id = _ } as response)
          =
-         Embeddings.create ~api_key ?on_response_body { model; input; dimensions }
+         Embeddings.create
+           ~api_key
+           ?on_response_body:
+             (Option.map log_response_to ~f:(fun path body ->
+                Writer.save path ~contents:body))
+           { model
+           ; input =
+               (match inputs with
+                | [ s ] -> Embeddings.Request.Input.Single s
+                | xs -> Multi xs)
+           ; dimensions
+           }
        in
        match sexp with
        | true -> print_s [%sexp (response : Embeddings.Response.t)]

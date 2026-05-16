@@ -2,4 +2,4 @@
 
 open! Core
 
-type t = float [@@deriving jsonaf, sexp_of]
+type t = float [@@deriving jsonaf, sexp]

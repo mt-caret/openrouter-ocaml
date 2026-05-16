@@ -1,6 +1,6 @@
 open! Core
 
-type t = float [@@deriving sexp_of]
+type t = float [@@deriving sexp]
 
 let t_of_jsonaf json =
   match json with

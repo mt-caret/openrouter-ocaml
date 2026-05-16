@@ -7,7 +7,7 @@ module Request : sig
     type t =
       | Single of string
       | Multi of string list
-    [@@deriving jsonaf, sexp_of, variants]
+    [@@deriving jsonaf, sexp, variants]
   end
 
   type t =
@@ -15,7 +15,7 @@ module Request : sig
     ; input : Input.t
     ; dimensions : int option
     }
-  [@@deriving jsonaf, sexp_of]
+  [@@deriving jsonaf, sexp]
 end
 
 module Response : sig
@@ -25,7 +25,7 @@ module Response : sig
       ; index : int
       ; embedding : float list
       }
-    [@@deriving sexp_of]
+    [@@deriving sexp]
   end
 
   module Usage : sig
@@ -34,7 +34,7 @@ module Response : sig
       ; total_tokens : int
       ; cost : float option
       }
-    [@@deriving sexp_of]
+    [@@deriving sexp]
   end
 
   type t =
@@ -45,7 +45,7 @@ module Response : sig
     ; provider : string option
     ; id : string option
     }
-  [@@deriving sexp_of]
+  [@@deriving sexp]
 end
 
 val create

@@ -1,0 +1,31 @@
+(version 2.5.2)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (when %{pkg-self:dev} (run dune subst))
+     (run dune build -p %{pkg-self:name} -j %{jobs} @install))))))
+
+(depends
+ (all_platforms
+  (dune
+   ocaml
+   ocamlfind
+   fmt
+   cppo
+   csexp
+   astring
+   logs
+   cmdliner
+   re
+   ocaml-version
+   camlp-streams
+   result)))
+
+(source
+ (fetch
+  (url
+   https://github.com/realworldocaml/mdx/releases/download/2.5.2/mdx-2.5.2.tbz)
+  (checksum
+   sha256=c848c2c680c62662dc4a05f558e5c6c18ed2aab7bb6508c1d49109d6ea91a3cf)))
