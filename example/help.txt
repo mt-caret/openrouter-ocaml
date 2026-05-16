@@ -32,6 +32,8 @@ OpenRouter API example client
                              . fallback model id, in priority order (may be
                                repeated)
   . [-file PATH] ...         . attach a file (PDF or image)
+  . [-file-parser-pdf-engine ENGINE]
+                             . enable file-parser plugin with PDF engine
   . [-frequency-penalty FLOAT]
                              . frequency penalty
   . [-image-config KEY=JSON] ...
@@ -47,6 +49,8 @@ OpenRouter API example client
   . [-log-stream-to PATH]    . write each raw stream chunk JSON to PATH as one
                                line (streaming only); useful for capturing test
                                fixtures
+  . [-logit-bias TOKEN_ID=BIAS] ...
+                             . token logit bias in [-100,100] (may be repeated)
   . [-logprobs]              . return token logprobs
   . [-max-completion-tokens N]
                              . max completion tokens (modern alias for
@@ -60,6 +64,8 @@ OpenRouter API example client
   . [-model MODEL]           . model to use (default: anthropic/claude-opus-4.7)
   . [-moderation]            . enable moderation plugin
   . [-no-stream]             . disable streaming (use non-streaming API)
+  . [-parallel-tool-calls BOOL]
+                             . allow parallel tool calls
   . [-pareto-min-coding-score FLOAT]
                              . enable pareto-router plugin with minimum coding
                                score
@@ -76,6 +82,14 @@ OpenRouter API example client
                                repeated)
   . [-provider-max-price-audio FLOAT]
                              . max provider audio price
+  . [-provider-max-price-completion FLOAT]
+                             . max provider completion price
+  . [-provider-max-price-image FLOAT]
+                             . max provider image price
+  . [-provider-max-price-prompt FLOAT]
+                             . max provider prompt price
+  . [-provider-max-price-request FLOAT]
+                             . max provider request price
   . [-provider-no-fallbacks] . disable provider fallbacks (sets
                                allow_fallbacks=false)
   . [-provider-only NAME] ...
@@ -83,6 +97,13 @@ OpenRouter API example client
                                repeated)
   . [-provider-order NAME] ...
                              . try providers in this order (may be repeated)
+  . [-provider-preferred-max-latency FLOAT]
+                             . preferred maximum provider latency
+  . [-provider-preferred-min-throughput FLOAT]
+                             . preferred minimum provider throughput
+  . [-provider-quantization NAME] ...
+                             . restrict routing to this quantization (may be
+                               repeated)
   . [-provider-require-parameters]
                              . require providers that support all request
                                parameters
@@ -93,6 +114,7 @@ OpenRouter API example client
                              . reasoning effort
                                (xhigh|high|medium|low|minimal|none); mutually
                                exclusive with -reasoning
+  . [-reasoning-enabled]     . enable reasoning with provider defaults
   . [-reasoning-exclude]     . hide reasoning from response output
   . [-reasoning-summary VERBOSITY]
                              . reasoning summary verbosity
@@ -148,6 +170,8 @@ OpenRouter API example client
   . [-structured-outputs]    . set structured_outputs=true (strict-mode flag
                                complementary to -json-schema)
   . [-temperature FLOAT]     . sampling temperature
+  . [-tool-choice CHOICE]    . tool choice: auto, none, required, or
+                               function:NAME
   . [-top-a FLOAT]           . top-a sampling cutoff
   . [-top-k N]               . top-k sampling cutoff
   . [-top-logprobs N]        . return top-N logprobs per token
@@ -157,6 +181,8 @@ OpenRouter API example client
                                repeated)
   . [-user ID]               . unique user identifier
   . [-verbosity LEVEL]       . completion verbosity (low|medium|high|xhigh|max)
+  . [-web-search-max-results N]
+                             . maximum web-search plugin results
   . [-web-search]            . enable web search plugin
   embeddings                 . Get embeddings for one or more inputs (one per
                                line on stdin if no -input)

@@ -13,12 +13,28 @@ let parse_key_json ~flag s =
   key, Or_error.ok (Jsonaf.parse value) |> Option.value ~default:(`String value)
 ;;
 
+let parse_key_int ~flag s =
+  let%bind.Or_error key, value = parse_key_value ~flag s in
+  let%map.Or_error value =
+    Or_error.tag_arg
+      (Or_error.try_with (fun () -> Int.of_string value))
+      "invalid integer value"
+      value
+      [%sexp_of: string]
+  in
+  key, value
+;;
+
 let key_values_or_error ~flag values =
   Or_error.combine_errors (List.map values ~f:(parse_key_value ~flag))
 ;;
 
 let key_json_values_or_error ~flag values =
   Or_error.combine_errors (List.map values ~f:(parse_key_json ~flag))
+;;
+
+let key_int_values_or_error ~flag values =
+  Or_error.combine_errors (List.map values ~f:(parse_key_int ~flag))
 ;;
 
 module Message_input = struct
@@ -173,7 +189,9 @@ module Reasoning = struct
   type t = Completions.Request.Reasoning.t option [@@deriving sexp]
 
   let param =
-    let%map_open.Command reasoning_tokens =
+    let%map_open.Command reasoning_enabled =
+      flag "reasoning-enabled" no_arg ~doc:" enable reasoning with provider defaults"
+    and reasoning_tokens =
       flag
         "reasoning"
         (optional int)
@@ -193,14 +211,58 @@ module Reasoning = struct
         (optional string)
         ~doc:"VERBOSITY reasoning summary verbosity (auto|concise|detailed)"
     in
-    match reasoning_tokens, reasoning_effort, reasoning_exclude, reasoning_summary with
-    | None, None, false, None -> Ok None
-    | max_tokens, effort, exclude, summary ->
-      let exclude = Some exclude in
+    match
+      ( reasoning_enabled
+      , reasoning_tokens
+      , reasoning_effort
+      , reasoning_exclude
+      , reasoning_summary )
+    with
+    | false, None, None, false, None -> Ok None
+    | enabled, max_tokens, effort, exclude, summary ->
+      let enabled = Option.some_if enabled true in
+      let exclude = Option.some_if exclude true in
       let%map.Or_error reasoning =
-        Completions.Request.Reasoning.create ?effort ?max_tokens ?exclude ?summary ()
+        Completions.Request.Reasoning.create
+          ?effort
+          ?max_tokens
+          ?exclude
+          ?enabled
+          ?summary
+          ()
       in
       Some reasoning
+  ;;
+end
+
+module Tool_choice = struct
+  type t = Completions.Tool_choice.t option [@@deriving sexp]
+
+  let param =
+    Command.Param.flag
+      "tool-choice"
+      (Command.Param.optional Completions.Tool_choice.arg_type)
+      ~doc:"CHOICE tool choice: auto, none, required, or function:NAME"
+  ;;
+end
+
+module Logit_bias = struct
+  type t = Completions.Request.Logit_bias.t option [@@deriving sexp]
+
+  let param =
+    let%map_open.Command logit_bias =
+      flag
+        "logit-bias"
+        (listed string)
+        ~doc:"TOKEN_ID=BIAS token logit bias in [-100,100] (may be repeated)"
+    in
+    match logit_bias with
+    | [] -> Ok None
+    | _ :: _ ->
+      let%map.Or_error logit_bias =
+        key_int_values_or_error ~flag:"-logit-bias" logit_bias
+      in
+      Some logit_bias
   ;;
 end
 
@@ -210,6 +272,11 @@ module Plugins = struct
   let param =
     let%map_open.Command web_search =
       flag "web-search" no_arg ~doc:" enable web search plugin"
+    and web_search_max_results =
+      flag
+        "web-search-max-results"
+        (optional int)
+        ~doc:"N maximum web-search plugin results"
     and auto_router = flag "auto-router" no_arg ~doc:" enable auto-router plugin"
     and auto_router_allowed_models =
       flag
@@ -221,6 +288,11 @@ module Plugins = struct
       flag "response-healing" no_arg ~doc:" enable response-healing plugin"
     and context_compression =
       flag "context-compression" no_arg ~doc:" enable context-compression plugin"
+    and file_parser_pdf_engine =
+      flag
+        "file-parser-pdf-engine"
+        (optional Completions.Plugin.Pdf_engine.arg_type)
+        ~doc:"ENGINE enable file-parser plugin with PDF engine"
     and pareto_min_coding_score =
       flag
         "pareto-min-coding-score"
@@ -235,9 +307,11 @@ module Plugins = struct
       ; (match moderation with
          | true -> Some Completions.Plugin.moderation
          | false -> None)
-      ; (match web_search with
-         | true -> Some (Completions.Plugin.web ())
-         | false -> None)
+      ; (match web_search, web_search_max_results with
+         | false, None -> None
+         | _, max_results -> Some (Completions.Plugin.web ~enabled:true ?max_results ()))
+      ; Option.map file_parser_pdf_engine ~f:(fun pdf_engine ->
+          Completions.Plugin.file_parser ~pdf_engine ())
       ; (match response_healing with
          | true -> Some Completions.Plugin.response_healing
          | false -> None)
@@ -420,7 +494,7 @@ module Server_tools = struct
 end
 
 module Provider = struct
-  type t = Completions.Request.Provider.t [@@deriving sexp]
+  type t = Completions.Request.Provider.t option [@@deriving sexp]
 
   let param =
     let%map_open.Command provider_only =
@@ -433,6 +507,11 @@ module Provider = struct
         "provider-ignore"
         (listed string)
         ~doc:"NAME exclude this provider from routing (may be repeated)"
+    and provider_quantization =
+      flag
+        "provider-quantization"
+        (listed string)
+        ~doc:"NAME restrict routing to this quantization (may be repeated)"
     and provider_order =
       flag
         "provider-order"
@@ -465,36 +544,82 @@ module Provider = struct
         "provider-enforce-distillable-text"
         no_arg
         ~doc:" restrict routing to providers/models that allow text distillation"
+    and provider_preferred_min_throughput =
+      flag
+        "provider-preferred-min-throughput"
+        (optional float)
+        ~doc:"FLOAT preferred minimum provider throughput"
+    and provider_preferred_max_latency =
+      flag
+        "provider-preferred-max-latency"
+        (optional float)
+        ~doc:"FLOAT preferred maximum provider latency"
+    and provider_max_price_prompt =
+      flag
+        "provider-max-price-prompt"
+        (optional float)
+        ~doc:"FLOAT max provider prompt price"
+    and provider_max_price_completion =
+      flag
+        "provider-max-price-completion"
+        (optional float)
+        ~doc:"FLOAT max provider completion price"
+    and provider_max_price_request =
+      flag
+        "provider-max-price-request"
+        (optional float)
+        ~doc:"FLOAT max provider request price"
+    and provider_max_price_image =
+      flag
+        "provider-max-price-image"
+        (optional float)
+        ~doc:"FLOAT max provider image price"
     and provider_max_price_audio =
       flag
         "provider-max-price-audio"
         (optional float)
         ~doc:"FLOAT max provider audio price"
     in
+    let max_price =
+      match
+        List.exists
+          [ provider_max_price_prompt
+          ; provider_max_price_completion
+          ; provider_max_price_request
+          ; provider_max_price_image
+          ; provider_max_price_audio
+          ]
+          ~f:Option.is_some
+      with
+      | false -> None
+      | true ->
+        Some
+          { Completions.Request.Provider.Max_price.prompt = provider_max_price_prompt
+          ; completion = provider_max_price_completion
+          ; request = provider_max_price_request
+          ; image = provider_max_price_image
+          ; audio = provider_max_price_audio
+          }
+    in
     let provider =
-      let max_price =
-        Option.map provider_max_price_audio ~f:(fun audio ->
-          { Completions.Request.Provider.Max_price.prompt = None
-          ; completion = None
-          ; request = None
-          ; image = None
-          ; audio = Some audio
-          })
-      in
-      { Completions.Request.Provider.empty with
-        order = Some provider_order
-      ; allow_fallbacks = Some (not provider_allow_fallbacks)
-      ; require_parameters = Some provider_require_parameters
+      { Completions.Request.Provider.order =
+          Option.some_if (not (List.is_empty provider_order)) provider_order
+      ; allow_fallbacks = Option.some_if provider_allow_fallbacks false
+      ; require_parameters = Option.some_if provider_require_parameters true
       ; data_collection = provider_data_collection
-      ; zdr = Some provider_zdr
-      ; only = Some provider_only
-      ; ignore = Some provider_ignore
+      ; zdr = Option.some_if provider_zdr true
+      ; only = Option.some_if (not (List.is_empty provider_only)) provider_only
+      ; ignore = Option.some_if (not (List.is_empty provider_ignore)) provider_ignore
+      ; quantizations =
+          Option.some_if (not (List.is_empty provider_quantization)) provider_quantization
       ; sort = provider_sort
       ; max_price
-      ; enforce_distillable_text = Some provider_enforce_distillable_text
+      ; preferred_min_throughput = provider_preferred_min_throughput
+      ; preferred_max_latency = provider_preferred_max_latency
+      ; enforce_distillable_text = Option.some_if provider_enforce_distillable_text true
       }
     in
-    provider
+    Option.some_if (not (Completions.Request.Provider.is_empty provider)) provider
   ;;
 end
 
@@ -512,9 +637,11 @@ module Request_options = struct
     ; frequency_penalty : float option
     ; presence_penalty : float option
     ; repetition_penalty : float option
+    ; logit_bias : Logit_bias.t
     ; logprobs : bool
     ; top_logprobs : int option
     ; verbosity : Completions.Request.Verbosity.t option
+    ; parallel_tool_calls : bool option
     ; modalities : string list
     ; structured_outputs : bool
     ; cache_control : Completions.Request.Cache_control.t option
@@ -552,6 +679,7 @@ module Request_options = struct
       flag "presence-penalty" (optional float) ~doc:"FLOAT presence penalty"
     and repetition_penalty =
       flag "repetition-penalty" (optional float) ~doc:"FLOAT repetition penalty"
+    and logit_bias = Logit_bias.param
     and logprobs = flag "logprobs" no_arg ~doc:" return token logprobs"
     and top_logprobs =
       flag "top-logprobs" (optional int) ~doc:"N return top-N logprobs per token"
@@ -560,6 +688,8 @@ module Request_options = struct
         "verbosity"
         (optional Completions.Request.Verbosity.arg_type)
         ~doc:"LEVEL completion verbosity (low|medium|high|xhigh|max)"
+    and parallel_tool_calls =
+      flag "parallel-tool-calls" (optional bool) ~doc:"BOOL allow parallel tool calls"
     and modalities =
       flag
         "modality"
@@ -607,6 +737,7 @@ module Request_options = struct
     in
     let%map.Or_error metadata = key_values_or_error ~flag:"-metadata" metadata
     and trace = key_json_values_or_error ~flag:"-trace" trace
+    and logit_bias
     and image_config =
       image_config
       |> key_json_values_or_error ~flag:"-image-config"
@@ -624,9 +755,11 @@ module Request_options = struct
     ; frequency_penalty
     ; presence_penalty
     ; repetition_penalty
+    ; logit_bias
     ; logprobs
     ; top_logprobs
     ; verbosity
+    ; parallel_tool_calls
     ; modalities
     ; structured_outputs
     ; cache_control =
@@ -755,6 +888,7 @@ module Common = struct
     ; message_input : Message_input.t
     ; output_format : Output_format.t option
     ; reasoning : Reasoning.t
+    ; tool_choice : Tool_choice.t
     ; plugins : Plugins.t
     ; server_tools : Server_tools.t
     ; provider : Provider.t
@@ -769,6 +903,7 @@ module Common = struct
         ~doc:[%string "MODEL model to use (default: %{default_model})"]
     and message_input = Message_input.param
     and reasoning = Reasoning.param
+    and tool_choice = Tool_choice.param
     and plugins = Plugins.param
     and server_tools = Server_tools.param
     and provider = Provider.param
@@ -782,6 +917,7 @@ module Common = struct
     ; message_input
     ; output_format
     ; reasoning
+    ; tool_choice
     ; plugins
     ; server_tools
     ; provider
@@ -794,6 +930,7 @@ module Common = struct
         ; message_input
         ; output_format
         ; reasoning
+        ; tool_choice
         ; plugins
         ; server_tools
         ; provider
@@ -810,9 +947,11 @@ module Common = struct
             ; frequency_penalty
             ; presence_penalty
             ; repetition_penalty
+            ; logit_bias
             ; logprobs
             ; top_logprobs
             ; verbosity
+            ; parallel_tool_calls
             ; modalities
             ; structured_outputs
             ; cache_control
@@ -833,19 +972,25 @@ module Common = struct
       let%bind message = Message_input.message_text message_input in
       Message_input.to_request_message message_input ~message
     in
+    let optional_list xs = Option.some_if (not (List.is_empty xs)) xs in
+    let optional_object (json : Jsonaf.t) =
+      match json with
+      | `Object [] -> None
+      | _ -> Some json
+    in
     fun ~create ->
       create
         ?cache_control
         ?reasoning
-        ?tools:(Some server_tools)
-        ?tool_choice:None
-        ?parallel_tool_calls:None
-        ?plugins:(Some plugins)
-        ?metadata:(Some metadata)
+        ?tools:(optional_list server_tools)
+        ?tool_choice
+        ?parallel_tool_calls
+        ?plugins:(optional_list plugins)
+        ?metadata:(optional_list metadata)
         ?user
         ?session_id
         ?route
-        ?trace:(Some trace)
+        ?trace:(optional_list trace)
         ?temperature
         ?top_p
         ?top_k
@@ -854,22 +999,22 @@ module Common = struct
         ?max_tokens
         ?max_completion_tokens
         ?seed
-        ?stop:(Some stop)
+        ?stop:(optional_list stop)
         ?frequency_penalty
         ?presence_penalty
         ?repetition_penalty
-        ?logit_bias:None
-        ?logprobs:(Some logprobs)
+        ?logit_bias
+        ?logprobs:(Option.some_if logprobs true)
         ?top_logprobs
         ?verbosity
         ?response_format
-        ?structured_outputs:(Some structured_outputs)
-        ?modalities:(Some modalities)
-        ?image_config:(Some image_config)
+        ?structured_outputs:(Option.some_if structured_outputs true)
+        ?modalities:(optional_list modalities)
+        ?image_config:(optional_object image_config)
         ?service_tier
-        ?models:(Some models)
-        ?transforms:(Some transforms)
-        ?provider:(Some provider)
+        ?models:(optional_list models)
+        ?transforms:(optional_list transforms)
+        ?provider
         ~model
         ~messages:[ user_message ]
         ()

@@ -285,6 +285,20 @@ module Tool_choice = struct
   let none = None_
   let required = Required
   let force_function name = Specific { type_ = "function"; function_ = { name } }
+
+  let of_string s =
+    match String.lsplit2 s ~on:':' with
+    | None ->
+      (match String.lowercase s with
+       | "auto" -> auto
+       | "none" -> none
+       | "required" -> required
+       | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "unknown tool_choice" (`String s))
+    | Some ("function", name) when not (String.is_empty name) -> force_function name
+    | Some _ -> Jsonaf_kernel.Conv.of_jsonaf_error "unknown tool_choice" (`String s)
+  ;;
+
+  let arg_type = Command.Arg_type.create of_string
 end
 
 module Tool_call = struct

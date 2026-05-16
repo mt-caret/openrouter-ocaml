@@ -101,6 +101,93 @@ let%expect_test "request: with function tool + tool_choice = auto" =
     |}]
 ;;
 
+let%expect_test
+    "request: forced tool choice + parallel calls + logit bias + reasoning enabled"
+  =
+  let lookup_tool =
+    Tool.function_
+      ~name:"lookup_code"
+      ~description:"Look up a short code"
+      ~parameters:
+        (`Object
+            [ "type", `String "object"
+            ; "properties", `Object [ "code", `Object [ "type", `String "string" ] ]
+            ; "required", `Array [ `String "code" ]
+            ; "additionalProperties", `False
+            ])
+      ~strict:true
+      ()
+  in
+  let reasoning = Request.Reasoning.create ~enabled:true () |> Or_error.ok_exn in
+  Request.create
+    ~model:"openai/gpt-4o-mini"
+    ~messages:[ Request.Message.user "Look up code A1" ]
+    ~reasoning
+    ~tools:[ lookup_tool ]
+    ~tool_choice:(Tool_choice.force_function "lookup_code")
+    ~parallel_tool_calls:false
+    ~plugins:[ Plugin.web ~enabled:true ~max_results:2 () ]
+    ~logit_bias:[ "42", 10; "100", -5 ]
+    ()
+  |> print_non_streaming;
+  [%expect
+    {|
+    {
+      "model": "openai/gpt-4o-mini",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Look up code A1"
+        }
+      ],
+      "stream": false,
+      "reasoning": {
+        "enabled": true
+      },
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "lookup_code",
+            "description": "Look up a short code",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true
+          }
+        }
+      ],
+      "tool_choice": {
+        "type": "function",
+        "function": {
+          "name": "lookup_code"
+        }
+      },
+      "parallel_tool_calls": false,
+      "plugins": [
+        {
+          "id": "web",
+          "enabled": true,
+          "max_results": 2
+        }
+      ],
+      "logit_bias": {
+        "42": 10,
+        "100": -5
+      }
+    }
+    |}]
+;;
+
 let%expect_test "request: tool result message (assistant tool_call → tool reply)" =
   Request.create
     ~model:"openai/gpt-4o"

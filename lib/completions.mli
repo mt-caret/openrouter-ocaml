@@ -166,6 +166,7 @@ module Tool_choice : sig
   val none : t
   val required : t
   val force_function : string -> t
+  val arg_type : t Command.Arg_type.t
 end
 
 (** Tool call made by the model *)
@@ -211,6 +212,8 @@ module Plugin : sig
       | Mistral_ocr
       | Native
     [@@deriving sexp]
+
+    val arg_type : t Command.Arg_type.t
   end
 
   module File_parser : sig
