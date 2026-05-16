@@ -32,7 +32,7 @@ project-specific guidance.
 - A "20-model sweep" (10 providers × {stream, no-stream}) is the default
   smoke test after any parser-side change. If the script isn't lying around
   in `/tmp`, recreate it with the model list in the docstring at the top of
-  `test/test_response_parsing.ml`.
+  `test/fixture_helpers.ml`.
 - Don't commit API keys. If you write a script that uses one, write it to
   `/tmp/` rather than the repo.
 
@@ -46,7 +46,7 @@ project-specific guidance.
   these tests are about JSON shapes, not provider coverage. Pick combinations
   that produce a structurally distinct response (different fields populated,
   different sub-record shapes, etc.). The doc comment at the top of
-  `test/test_response_parsing.ml` reiterates this.
+  `test/fixture_helpers.ml` reiterates this.
 - Large fixtures (>50KB) — don't snapshot the full sexp; snapshot a summary
   (`count` + `List.hd_exn` of the relevant list) so the test catches
   shape regressions without the snapshot becoming unwieldy. See the
@@ -136,6 +136,12 @@ go on the type itself, not in the example. Two recent migrations:
 is `equal t empty` via derived `equal`. Smart constructors are preferred
 over inline record literals in user code.
 
+### Interface files
+
+Every library module should have an `.mli`, except the module whose name
+matches the library name. That wrapper module just re-exports the same public
+surface and should not duplicate it in a second interface file.
+
 ## Common rookie mistakes
 
 - **Sync I/O under `open! Async`**: don't use `In_channel.read_all`,
@@ -171,8 +177,9 @@ over inline record literals in user code.
   making any cross-cutting change.
 - `lib/string_variant.{ml,mli}` and `lib/tagged_union.{ml,mli}` — the two
   reusable abstractions; understand them before introducing a third.
-- `test/test_response_parsing.ml` — the fixture workflow doc-comment is
-  the canonical "how to add a regression test" guide.
+- `test/fixture_helpers.ml` — the fixture workflow doc-comment is the
+  canonical "how to add a regression test" guide. Fixture tests are split by
+  shape across `test/test_*_fixtures.ml`.
 - `test/test_request_serialization.ml` — the JSON-shape guard for the
   smart constructors. Add a snapshot here when adding a new
   request-side field.

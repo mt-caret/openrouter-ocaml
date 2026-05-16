@@ -1,0 +1,4 @@
+(mdx
+ (files README.md)
+ (libraries async async_kernel core openrouter_api)
+ (package openrouter_api))

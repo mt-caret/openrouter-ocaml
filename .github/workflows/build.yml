@@ -25,4 +25,8 @@ jobs:
 
       - run: dune tool install ocamlformat
 
+      - run: dune build
+
+      - run: dune runtest
+
       - run: dune fmt

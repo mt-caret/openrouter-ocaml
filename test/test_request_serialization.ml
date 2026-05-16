@@ -53,6 +53,7 @@ let%expect_test "request: with function tool + tool_choice = auto" =
                   ] )
             ; "required", `Array [ `String "query" ]
             ])
+      ~strict:true
       ()
   in
   Request.create
@@ -90,7 +91,8 @@ let%expect_test "request: with function tool + tool_choice = auto" =
               "required": [
                 "query"
               ]
-            }
+            },
+            "strict": true
           }
         }
       ],
@@ -391,9 +393,16 @@ let%expect_test "request: provider routing (every Provider.t field)" =
     ; quantizations = Some [ "fp8" ]
     ; sort = Some Price
     ; max_price =
-        Some { prompt = Some 1.0; completion = Some 2.0; request = None; image = None }
+        Some
+          { prompt = Some 1.0
+          ; completion = Some 2.0
+          ; request = None
+          ; image = None
+          ; audio = Some 0.000003
+          }
     ; preferred_min_throughput = Some 30.0
     ; preferred_max_latency = Some 5.0
+    ; enforce_distillable_text = Some true
     }
   in
   Request.create
@@ -432,10 +441,176 @@ let%expect_test "request: provider routing (every Provider.t field)" =
         "sort": "price",
         "max_price": {
           "prompt": 1,
-          "completion": 2
+          "completion": 2,
+          "audio": 3e-06
         },
         "preferred_min_throughput": 30,
-        "preferred_max_latency": 5
+        "preferred_max_latency": 5,
+        "enforce_distillable_text": true
+      }
+    }
+    |}]
+;;
+
+let%expect_test "request: current OpenAPI chat knobs + server tools" =
+  let reasoning =
+    Request.Reasoning.create ~effort:Low ~summary:"concise" () |> Or_error.ok_exn
+  in
+  Request.create_streaming
+    ~model:"openai/gpt-5.2"
+    ~messages:[ Request.Message.user "what changed in OpenRouter this week?" ]
+    ~cache_control:(Request.Cache_control.ephemeral ~ttl:"5m" ())
+    ~debug:(Request.Debug.create ~echo_upstream_body:true ())
+    ~reasoning
+    ~tools:
+      [ Tool.web_search
+          ~engine:"exa"
+          ~max_results:3
+          ~max_total_results:10
+          ~search_context_size:"low"
+          ~allowed_domains:[ "openrouter.ai" ]
+          ~blocked_domains:[ "example.com" ]
+          ()
+      ; Tool.web_fetch
+          ~engine:"native"
+          ~max_uses:2
+          ~max_content_tokens:500
+          ~allowed_domains:[ "openrouter.ai" ]
+          ~blocked_domains:[ "ads.example" ]
+          ()
+      ; Tool.datetime
+      ; Tool.image_generation
+          ~model:"openai/gpt-image-1"
+          ~prompt:"single chart icon"
+          ~parameters:[ "quality", `String "high" ]
+          ()
+      ; Tool.search_models ~max_results:4 ()
+      ]
+    ~plugins:
+      [ Plugin.auto_router ~enabled:true ~allowed_models:[ "openai/*"; "anthropic/*" ] ()
+      ; Plugin.moderation
+      ; Plugin.pareto_router ~min_coding_score:0.8 ()
+      ]
+    ~metadata:[ "purpose", "snapshot" ]
+    ~user:"user-123"
+    ~session_id:"session-456"
+    ~route:"fallback"
+    ~trace:[ "trace_id", `String "trace-abc123" ]
+    ~modalities:[ "text"; "audio" ]
+    ~audio:(Request.Audio.create ~voice:"alloy" ~format:"wav")
+    ~image_config:(`Object [ "aspect_ratio", `String "16:9" ])
+    ~stream_options:(Request.Stream_options.create ~include_usage:true ())
+    ()
+  |> print_streaming;
+  [%expect
+    {|
+    {
+      "model": "openai/gpt-5.2",
+      "messages": [
+        {
+          "role": "user",
+          "content": "what changed in OpenRouter this week?"
+        }
+      ],
+      "stream": true,
+      "cache_control": {
+        "type": "ephemeral",
+        "ttl": "5m"
+      },
+      "debug": {
+        "echo_upstream_body": true
+      },
+      "reasoning": {
+        "effort": "low",
+        "summary": "concise"
+      },
+      "tools": [
+        {
+          "type": "openrouter:web_search",
+          "parameters": {
+            "engine": "exa",
+            "max_results": 3,
+            "max_total_results": 10,
+            "search_context_size": "low",
+            "allowed_domains": [
+              "openrouter.ai"
+            ],
+            "excluded_domains": [
+              "example.com"
+            ]
+          }
+        },
+        {
+          "type": "openrouter:web_fetch",
+          "parameters": {
+            "engine": "native",
+            "max_uses": 2,
+            "max_content_tokens": 500,
+            "allowed_domains": [
+              "openrouter.ai"
+            ],
+            "blocked_domains": [
+              "ads.example"
+            ]
+          }
+        },
+        {
+          "type": "openrouter:datetime"
+        },
+        {
+          "type": "openrouter:image_generation",
+          "parameters": {
+            "model": "openai/gpt-image-1",
+            "prompt": "single chart icon",
+            "quality": "high"
+          }
+        },
+        {
+          "type": "openrouter:experimental__search_models",
+          "parameters": {
+            "max_results": 4
+          }
+        }
+      ],
+      "plugins": [
+        {
+          "id": "auto-router",
+          "enabled": true,
+          "allowed_models": [
+            "openai/*",
+            "anthropic/*"
+          ]
+        },
+        {
+          "id": "moderation"
+        },
+        {
+          "id": "pareto-router",
+          "min_coding_score": 0.8
+        }
+      ],
+      "metadata": {
+        "purpose": "snapshot"
+      },
+      "user": "user-123",
+      "session_id": "session-456",
+      "route": "fallback",
+      "trace": {
+        "trace_id": "trace-abc123"
+      },
+      "modalities": [
+        "text",
+        "audio"
+      ],
+      "audio": {
+        "voice": "alloy",
+        "format": "wav"
+      },
+      "image_config": {
+        "aspect_ratio": "16:9"
+      },
+      "stream_options": {
+        "include_usage": true
       }
     }
     |}]

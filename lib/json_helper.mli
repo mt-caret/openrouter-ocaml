@@ -18,7 +18,7 @@ open! Core
     keeps [t] concrete to the outside world without [T] needing to leak
     into the [.mli]. *)
 module Make_string_variant (T : sig
-    type t [@@deriving sexp_of, enumerate]
+    type t [@@deriving sexp, enumerate]
   end) : sig
   include Stringable.S with type t := T.t
   include Jsonaf.Jsonafable.S with type t := T.t

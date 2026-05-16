@@ -23,7 +23,7 @@ module Reasoning_detail = struct
     ; data : string option [@default None] [@jsonaf_drop_default.equal]
       (* Google's encrypted reasoning *)
     }
-  [@@deriving equal, jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+  [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 end
 
 (* Image in a message response. [index] is absent on Gemini's image-output
@@ -31,7 +31,7 @@ end
 module Image = struct
   module Image_url = struct
     type t = { url : string }
-    [@@deriving equal, jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+    [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
   end
 
   type t =
@@ -39,7 +39,7 @@ module Image = struct
     ; image_url : Image_url.t
     ; index : int option [@default None] [@jsonaf_drop_default.equal]
     }
-  [@@deriving equal, jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+  [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 
   module Elide_data = struct
     type nonrec t = t =
@@ -47,8 +47,18 @@ module Image = struct
       ; image_url : (Image_url.t[@sexp.opaque])
       ; index : int option
       }
-    [@@deriving sexp_of]
+    [@@deriving sexp]
   end
+end
+
+module Audio_output = struct
+  type t =
+    { id : string option [@default None]
+    ; data : string option [@default None]
+    ; expires_at : int option [@default None]
+    ; transcript : string option [@default None]
+    }
+  [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 end
 
 (* Tool calling types per OpenRouter API spec:
@@ -57,7 +67,7 @@ end
 module Tool = struct
   (* JSON value with equality (Jsonaf.t has exactly_equal but not equal). *)
   module Json_schema = struct
-    type t = Jsonaf.t [@@deriving jsonaf, sexp_of]
+    type t = Jsonaf.t [@@deriving jsonaf, sexp]
 
     let equal = Jsonaf.exactly_equal
   end
@@ -67,18 +77,21 @@ module Tool = struct
       { name : string
       ; description : string option [@jsonaf.option]
       ; parameters : Json_schema.t option [@jsonaf.option]
+      ; strict : bool option [@jsonaf.option]
       }
-    [@@deriving equal, jsonaf, sexp_of]
+    [@@deriving equal, jsonaf, sexp]
   end
 
   module Web_search = struct
     type t =
       { engine : string option [@jsonaf.option]
+      ; max_results : int option [@jsonaf.option]
       ; max_total_results : int option [@jsonaf.option]
+      ; search_context_size : string option [@jsonaf.option]
       ; allowed_domains : string list option [@jsonaf.option]
-      ; blocked_domains : string list option [@jsonaf.option]
+      ; blocked_domains : string list option [@key "excluded_domains"] [@jsonaf.option]
       }
-    [@@deriving equal, jsonaf, sexp_of]
+    [@@deriving equal, jsonaf, sexp]
   end
 
   module Web_fetch = struct
@@ -89,12 +102,62 @@ module Tool = struct
       ; allowed_domains : string list option [@jsonaf.option]
       ; blocked_domains : string list option [@jsonaf.option]
       }
-    [@@deriving equal, jsonaf, sexp_of]
+    [@@deriving equal, jsonaf, sexp]
   end
 
   module Image_generation = struct
-    type t = { prompt : string option [@jsonaf.option] }
-    [@@deriving equal, jsonaf, sexp_of]
+    (* [parameters] are extra object fields in OpenRouter's
+       ImageGenerationServerToolConfig, alongside [model] and [prompt]. *)
+    type t =
+      { model : string option [@jsonaf.option]
+      ; prompt : string option [@jsonaf.option]
+      ; parameters : (string * Json_schema.t) list
+      }
+    [@@deriving equal, sexp]
+
+    let jsonaf_of_t { model; prompt; parameters } =
+      `Object
+        (List.filter_opt
+           [ Option.map model ~f:(fun model -> "model", `String model)
+           ; Option.map prompt ~f:(fun prompt -> "prompt", `String prompt)
+           ]
+         @ parameters)
+    ;;
+
+    let t_of_jsonaf = function
+      | `Object kvs ->
+        let one_or_none ~field values =
+          match values with
+          | [] -> None
+          | [ value ] -> Some value
+          | _ :: _ :: _ ->
+            Jsonaf_kernel.Conv.of_jsonaf_error
+              [%string "Duplicate image_generation %{field} field"]
+              (`Object kvs)
+        in
+        let models, prompts, parameters =
+          List.partition3_map kvs ~f:(fun (k, v) ->
+            match k, v with
+            | "model", `String s -> `Fst s
+            | "prompt", `String s -> `Snd s
+            | "model", _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Expected string model" v
+            | "prompt", _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Expected string prompt" v
+            | _ -> `Trd (k, v))
+        in
+        { model = one_or_none ~field:"model" models
+        ; prompt = one_or_none ~field:"prompt" prompts
+        ; parameters
+        }
+      | json ->
+        Jsonaf_kernel.Conv.of_jsonaf_error
+          "Expected object for image_generation parameters"
+          json
+    ;;
+  end
+
+  module Search_models = struct
+    type t = { max_results : int option [@jsonaf.option] }
+    [@@deriving equal, jsonaf, sexp]
   end
 
   module T = struct
@@ -104,7 +167,8 @@ module Tool = struct
       | Web_fetch of Web_fetch.t
       | Datetime
       | Image_generation of Image_generation.t
-    [@@deriving equal, sexp_of, typed_variants]
+      | Search_models of Search_models.t
+    [@@deriving equal, sexp, typed_variants]
 
     let discriminator = "type"
 
@@ -116,29 +180,55 @@ module Tool = struct
           match v with
           | Function -> "function"
           | Web_search | Web_fetch | Datetime | Image_generation ->
-            "openrouter:" ^ Typed_variant.name v)
+            "openrouter:" ^ Typed_variant.name v
+          | Search_models -> "openrouter:experimental__search_models")
     ;;
 
     let codec : type a. a Typed_variant.t -> a Json_helper.Tagged_union_codec.t = function
       | Function ->
         Json_helper.nested ~key:"function" Function.jsonaf_of_t Function.t_of_jsonaf
-      | Web_search -> Inline (Web_search.jsonaf_of_t, Web_search.t_of_jsonaf)
-      | Web_fetch -> Inline (Web_fetch.jsonaf_of_t, Web_fetch.t_of_jsonaf)
+      | Web_search ->
+        Json_helper.nested ~key:"parameters" Web_search.jsonaf_of_t Web_search.t_of_jsonaf
+      | Web_fetch ->
+        Json_helper.nested ~key:"parameters" Web_fetch.jsonaf_of_t Web_fetch.t_of_jsonaf
       | Datetime -> Tag_only
       | Image_generation ->
-        Inline (Image_generation.jsonaf_of_t, Image_generation.t_of_jsonaf)
+        Json_helper.nested
+          ~key:"parameters"
+          Image_generation.jsonaf_of_t
+          Image_generation.t_of_jsonaf
+      | Search_models ->
+        Json_helper.nested
+          ~key:"parameters"
+          Search_models.jsonaf_of_t
+          Search_models.t_of_jsonaf
     ;;
   end
 
   include T
   include Json_helper.Make_tagged_union (T)
 
-  let function_ ~name ?description ?parameters () =
-    Function { name; description; parameters }
+  let function_ ~name ?description ?parameters ?strict () =
+    Function { name; description; parameters; strict }
   ;;
 
-  let web_search ?engine ?max_total_results ?allowed_domains ?blocked_domains () =
-    Web_search { engine; max_total_results; allowed_domains; blocked_domains }
+  let web_search
+        ?engine
+        ?max_results
+        ?max_total_results
+        ?search_context_size
+        ?allowed_domains
+        ?blocked_domains
+        ()
+    =
+    Web_search
+      { engine
+      ; max_results
+      ; max_total_results
+      ; search_context_size
+      ; allowed_domains
+      ; blocked_domains
+      }
   ;;
 
   let web_fetch ?engine ?max_uses ?max_content_tokens ?allowed_domains ?blocked_domains ()
@@ -147,12 +237,17 @@ module Tool = struct
   ;;
 
   let datetime = Datetime
-  let image_generation ?prompt () = Image_generation { prompt }
+
+  let image_generation ?model ?prompt ?(parameters = []) () =
+    Image_generation { model; prompt; parameters }
+  ;;
+
+  let search_models ?max_results () = Search_models { max_results }
 end
 
 module Tool_choice = struct
   module Function_choice = struct
-    type t = { name : string } [@@deriving jsonaf, sexp_of]
+    type t = { name : string } [@@deriving jsonaf, sexp]
   end
 
   module Specific = struct
@@ -160,7 +255,7 @@ module Tool_choice = struct
       { type_ : string [@key "type"]
       ; function_ : Function_choice.t [@key "function"]
       }
-    [@@deriving jsonaf, sexp_of]
+    [@@deriving jsonaf, sexp]
   end
 
   type t =
@@ -168,7 +263,7 @@ module Tool_choice = struct
     | None_
     | Required
     | Specific of Specific.t
-  [@@deriving sexp_of]
+  [@@deriving sexp]
 
   let t_of_jsonaf json =
     match json with
@@ -198,7 +293,7 @@ module Tool_call = struct
       { name : string
       ; arguments : string (* JSON-encoded string *)
       }
-    [@@deriving equal, jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+    [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
   end
 
   type t =
@@ -206,16 +301,24 @@ module Tool_call = struct
     ; type_ : string [@key "type"]
     ; function_ : Function_call.t [@key "function"]
     }
-  [@@deriving equal, jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+  [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 end
 
 module Plugin = struct
+  module Auto_router = struct
+    type t =
+      { enabled : bool option [@jsonaf.option]
+      ; allowed_models : string list option [@jsonaf.option]
+      }
+    [@@deriving equal, jsonaf, sexp]
+  end
+
   module Web = struct
     type t =
       { enabled : bool option [@jsonaf.option]
       ; max_results : int option [@jsonaf.option]
       }
-    [@@deriving equal, jsonaf, sexp_of]
+    [@@deriving equal, jsonaf, sexp]
   end
 
   module Pdf_engine = struct
@@ -224,7 +327,7 @@ module Plugin = struct
         | Pdf_text
         | Mistral_ocr
         | Native
-      [@@deriving equal, sexp_of, enumerate]
+      [@@deriving equal, sexp, enumerate]
     end
 
     include T
@@ -233,35 +336,50 @@ module Plugin = struct
 
   module File_parser = struct
     module Pdf_config = struct
-      type t = { engine : Pdf_engine.t } [@@deriving equal, jsonaf, sexp_of]
+      type t = { engine : Pdf_engine.t } [@@deriving equal, jsonaf, sexp]
     end
 
     type t = { pdf : Pdf_config.t option [@jsonaf.option] }
-    [@@deriving equal, jsonaf, sexp_of]
+    [@@deriving equal, jsonaf, sexp]
+  end
+
+  module Pareto_router = struct
+    type t =
+      { enabled : bool option [@jsonaf.option]
+      ; min_coding_score : float option [@jsonaf.option]
+      }
+    [@@deriving equal, jsonaf, sexp]
   end
 
   module T = struct
     type t =
+      | Auto_router of Auto_router.t
+      | Moderation
       | Web of Web.t
       | File_parser of File_parser.t
       | Response_healing
       | Context_compression
-    [@@deriving equal, sexp_of, typed_variants]
+      | Pareto_router of Pareto_router.t
+    [@@deriving equal, sexp, typed_variants]
 
     let discriminator = "id"
     let tag = `Kebab_case
 
     let codec : type a. a Typed_variant.t -> a Json_helper.Tagged_union_codec.t = function
+      | Auto_router -> Inline (Auto_router.jsonaf_of_t, Auto_router.t_of_jsonaf)
+      | Moderation -> Tag_only
       | Web -> Inline (Web.jsonaf_of_t, Web.t_of_jsonaf)
       | File_parser -> Inline (File_parser.jsonaf_of_t, File_parser.t_of_jsonaf)
       | Response_healing -> Tag_only
       | Context_compression -> Tag_only
+      | Pareto_router -> Inline (Pareto_router.jsonaf_of_t, Pareto_router.t_of_jsonaf)
     ;;
   end
 
   include T
   include Json_helper.Make_tagged_union (T)
 
+  let auto_router ?enabled ?allowed_models () = Auto_router { enabled; allowed_models }
   let web ?enabled ?max_results () = Web { enabled; max_results }
 
   let file_parser ?pdf_engine () =
@@ -271,8 +389,13 @@ module Plugin = struct
     File_parser { pdf }
   ;;
 
+  let moderation = Moderation
   let response_healing = Response_healing
   let context_compression = Context_compression
+
+  let pareto_router ?enabled ?min_coding_score () =
+    Pareto_router { enabled; min_coding_score }
+  ;;
 end
 
 module Citation = struct
@@ -283,7 +406,7 @@ module Citation = struct
     ; start_index : int option [@jsonaf.option]
     ; end_index : int option [@jsonaf.option]
     }
-  [@@deriving equal, of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+  [@@deriving equal, of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 
   let of_annotation_jsonaf json =
     match Jsonaf.member "type" json with
@@ -300,6 +423,7 @@ module Message = struct
     { role : string
     ; content : string option
           [@default None] (* content can be null when assistant makes tool calls *)
+    ; audio : Audio_output.t option [@default None] [@sexp_drop_default.equal]
     ; refusal : string option [@default None]
     ; reasoning : string option [@default None]
     ; reasoning_details : Reasoning_detail.t list
@@ -311,12 +435,13 @@ module Message = struct
     ; tool_call_id : string option [@default None] [@jsonaf_drop_default.equal]
       (* For tool role messages: ID of the tool call being responded to *)
     }
-  [@@deriving jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+  [@@deriving jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 
   module Elide_image = struct
     type nonrec t = t =
       { role : string
       ; content : string option
+      ; audio : Audio_output.t option
       ; refusal : string option
       ; reasoning : string option
       ; reasoning_details : Reasoning_detail.t list
@@ -325,7 +450,7 @@ module Message = struct
       ; tool_calls : Tool_call.t list
       ; tool_call_id : string option
       }
-    [@@deriving sexp_of]
+    [@@deriving sexp]
   end
 end
 
@@ -337,7 +462,7 @@ module Request = struct
           { name : string
           ; arguments : string
           }
-        [@@deriving equal, jsonaf, sexp_of]
+        [@@deriving equal, jsonaf, sexp]
       end
 
       type t =
@@ -345,7 +470,7 @@ module Request = struct
         ; type_ : string [@key "type"]
         ; function_ : Function_call.t [@key "function"]
         }
-      [@@deriving equal, jsonaf, sexp_of]
+      [@@deriving equal, jsonaf, sexp]
     end
 
     module Content_part = struct
@@ -354,7 +479,7 @@ module Request = struct
           { type_ : string [@key "type"]
           ; ttl : string option [@jsonaf.option]
           }
-        [@@deriving equal, jsonaf, sexp_of]
+        [@@deriving equal, jsonaf, sexp]
 
         let ephemeral ?ttl () = { type_ = "ephemeral"; ttl }
       end
@@ -364,19 +489,19 @@ module Request = struct
           { text : string
           ; cache_control : Cache_control.t option [@jsonaf.option]
           }
-        [@@deriving equal, jsonaf, sexp_of]
+        [@@deriving equal, jsonaf, sexp]
       end
 
       module Image_url = struct
         module Url = struct
-          type t = { url : string } [@@deriving equal, jsonaf, sexp_of]
+          type t = { url : string } [@@deriving equal, jsonaf, sexp]
         end
 
         type t =
           { image_url : Url.t
           ; cache_control : Cache_control.t option [@jsonaf.option]
           }
-        [@@deriving equal, jsonaf, sexp_of]
+        [@@deriving equal, jsonaf, sexp]
       end
 
       module File = struct
@@ -385,14 +510,14 @@ module Request = struct
             { filename : string
             ; file_data : string
             }
-          [@@deriving equal, jsonaf, sexp_of]
+          [@@deriving equal, jsonaf, sexp]
         end
 
         type t =
           { file : Data.t
           ; cache_control : Cache_control.t option [@jsonaf.option]
           }
-        [@@deriving equal, jsonaf, sexp_of]
+        [@@deriving equal, jsonaf, sexp]
       end
 
       module Input_audio = struct
@@ -401,26 +526,26 @@ module Request = struct
             { data : string (** Base64-encoded audio bytes (no [data:] prefix). *)
             ; format : string (** e.g. "wav", "mp3", "aiff", "aac", "ogg", "flac". *)
             }
-          [@@deriving equal, jsonaf, sexp_of]
+          [@@deriving equal, jsonaf, sexp]
         end
 
         type t =
           { input_audio : Data.t
           ; cache_control : Cache_control.t option [@jsonaf.option]
           }
-        [@@deriving equal, jsonaf, sexp_of]
+        [@@deriving equal, jsonaf, sexp]
       end
 
       module Video_url = struct
         module Url = struct
-          type t = { url : string } [@@deriving equal, jsonaf, sexp_of]
+          type t = { url : string } [@@deriving equal, jsonaf, sexp]
         end
 
         type t =
           { video_url : Url.t
           ; cache_control : Cache_control.t option [@jsonaf.option]
           }
-        [@@deriving equal, jsonaf, sexp_of]
+        [@@deriving equal, jsonaf, sexp]
       end
 
       module T = struct
@@ -430,7 +555,7 @@ module Request = struct
           | File of File.t
           | Input_audio of Input_audio.t
           | Video_url of Video_url.t
-        [@@deriving equal, sexp_of, typed_variants]
+        [@@deriving equal, sexp, typed_variants]
 
         let discriminator = "type"
         let tag = `Infer
@@ -477,7 +602,7 @@ module Request = struct
       type t =
         | Text of string
         | Multipart of Content_part.t list
-      [@@deriving equal, sexp_of]
+      [@@deriving equal, sexp]
 
       let text s = Text s
       let multipart parts = Multipart parts
@@ -507,7 +632,7 @@ module Request = struct
       ; tool_call_id : string option [@default None] [@jsonaf_drop_default.equal]
         (* For tool role: ID of the tool call being responded to *)
       }
-    [@@deriving jsonaf, sexp_of]
+    [@@deriving jsonaf, sexp]
 
     let user content =
       { role = "user"
@@ -550,6 +675,8 @@ module Request = struct
     ;;
   end
 
+  module Cache_control = Message.Content_part.Cache_control
+
   module Reasoning = struct
     module Effort = struct
       module T = struct
@@ -560,7 +687,7 @@ module Request = struct
           | Low
           | Minimal
           | None_
-        [@@deriving sexp_of, enumerate]
+        [@@deriving sexp, enumerate]
       end
 
       include T
@@ -572,17 +699,18 @@ module Request = struct
       ; max_tokens : int option [@jsonaf.option]
       ; exclude : bool option [@jsonaf.option]
       ; enabled : bool option [@jsonaf.option]
+      ; summary : string option [@jsonaf.option]
       }
-    [@@deriving jsonaf, sexp_of]
+    [@@deriving jsonaf, sexp]
 
     (* OpenRouter's reasoning API spec: "[effort] and [max_tokens] are
        mutually exclusive". Enforce that here so the failure surfaces locally
        instead of as a 400 from the wire. *)
-    let create ?effort ?max_tokens ?exclude ?enabled () =
+    let create ?effort ?max_tokens ?exclude ?enabled ?summary () =
       match effort, max_tokens with
       | Some _, Some _ ->
         Or_error.error_string "Reasoning: effort and max_tokens are mutually exclusive"
-      | _ -> Ok { effort; max_tokens; exclude; enabled }
+      | _ -> Ok { effort; max_tokens; exclude; enabled; summary }
     ;;
   end
 
@@ -594,7 +722,7 @@ module Request = struct
         | High
         | Xhigh
         | Max
-      [@@deriving sexp_of, enumerate]
+      [@@deriving sexp, enumerate]
     end
 
     include T
@@ -602,7 +730,56 @@ module Request = struct
   end
 
   module Stream_options = struct
-    type t = { include_usage : bool option [@jsonaf.option] } [@@deriving jsonaf, sexp_of]
+    type t = { include_usage : bool option [@jsonaf.option] } [@@deriving jsonaf, sexp]
+
+    let create ?include_usage () = { include_usage }
+  end
+
+  module Audio = struct
+    type t =
+      { voice : string
+      ; format : string
+      }
+    [@@deriving jsonaf, sexp]
+
+    let create ~voice ~format = { voice; format }
+  end
+
+  module Debug = struct
+    type t = { echo_upstream_body : bool option [@jsonaf.option] }
+    [@@deriving jsonaf, sexp]
+
+    let create ?echo_upstream_body () = { echo_upstream_body }
+  end
+
+  module Image_config = struct
+    type t = Jsonaf.t [@@deriving jsonaf, sexp]
+  end
+
+  module Metadata = struct
+    type t = (string * string) list [@@deriving sexp]
+
+    let jsonaf_of_t t = `Object (List.map t ~f:(fun (k, v) -> k, `String v))
+
+    let t_of_jsonaf = function
+      | `Object kvs ->
+        List.map kvs ~f:(fun (k, v) ->
+          match v with
+          | `String s -> k, s
+          | _ -> Jsonaf_kernel.Conv.of_jsonaf_error "Expected string metadata value" v)
+      | json -> Jsonaf_kernel.Conv.of_jsonaf_error "Expected object for metadata" json
+    ;;
+  end
+
+  module Trace = struct
+    type t = (string * Jsonaf.t) list [@@deriving sexp]
+
+    let jsonaf_of_t t = `Object t
+
+    let t_of_jsonaf = function
+      | `Object kvs -> kvs
+      | json -> Jsonaf_kernel.Conv.of_jsonaf_error "Expected object for trace" json
+    ;;
   end
 
   module Provider = struct
@@ -612,7 +789,7 @@ module Request = struct
           | Price
           | Throughput
           | Latency
-        [@@deriving equal, sexp_of, enumerate]
+        [@@deriving equal, sexp, enumerate]
       end
 
       include T
@@ -624,7 +801,7 @@ module Request = struct
         type t =
           | Allow
           | Deny
-        [@@deriving equal, sexp_of, enumerate]
+        [@@deriving equal, sexp, enumerate]
       end
 
       include T
@@ -637,8 +814,9 @@ module Request = struct
         ; completion : float option [@jsonaf.option]
         ; request : float option [@jsonaf.option]
         ; image : float option [@jsonaf.option]
+        ; audio : float option [@jsonaf.option]
         }
-      [@@deriving equal, jsonaf, sexp_of]
+      [@@deriving equal, jsonaf, sexp]
     end
 
     type t =
@@ -654,8 +832,9 @@ module Request = struct
       ; max_price : Max_price.t option [@jsonaf.option]
       ; preferred_min_throughput : float option [@jsonaf.option]
       ; preferred_max_latency : float option [@jsonaf.option]
+      ; enforce_distillable_text : bool option [@jsonaf.option]
       }
-    [@@deriving equal, jsonaf, sexp_of]
+    [@@deriving equal, jsonaf, sexp]
 
     let empty =
       { order = None
@@ -670,6 +849,7 @@ module Request = struct
       ; max_price = None
       ; preferred_min_throughput = None
       ; preferred_max_latency = None
+      ; enforce_distillable_text = None
       }
     ;;
 
@@ -677,7 +857,7 @@ module Request = struct
   end
 
   module Logit_bias = struct
-    type t = (string * int) list [@@deriving sexp_of]
+    type t = (string * int) list [@@deriving sexp]
 
     let jsonaf_of_t t =
       `Object (List.map t ~f:(fun (k, v) -> k, `Number (Int.to_string v)))
@@ -704,14 +884,14 @@ module Request = struct
         ; schema : Jsonaf.t option [@jsonaf.option]
         ; description : string option [@jsonaf.option]
         }
-      [@@deriving jsonaf, sexp_of]
+      [@@deriving jsonaf, sexp]
     end
 
     module T = struct
       type t =
         | Json_object
         | Json_schema of Json_schema.t
-      [@@deriving sexp_of, typed_variants]
+      [@@deriving sexp, typed_variants]
 
       let discriminator = "type"
       let tag = `Infer
@@ -745,11 +925,18 @@ module Request = struct
     { model : string
     ; messages : Message.t list
     ; stream : bool
+    ; cache_control : Cache_control.t option [@jsonaf.option]
+    ; debug : Debug.t option [@jsonaf.option]
     ; reasoning : Reasoning.t option [@jsonaf.option]
     ; tools : Tool.t list [@default []] [@jsonaf_drop_default.equal]
     ; tool_choice : Tool_choice.t option [@jsonaf.option]
     ; parallel_tool_calls : bool option [@jsonaf.option]
     ; plugins : Plugin.t list [@default []] [@jsonaf_drop_default.equal]
+    ; metadata : Metadata.t option [@jsonaf.option]
+    ; user : string option [@jsonaf.option]
+    ; session_id : string option [@jsonaf.option]
+    ; route : string option [@jsonaf.option]
+    ; trace : Trace.t option [@jsonaf.option]
     ; temperature : float option [@jsonaf.option]
     ; top_p : float option [@jsonaf.option]
     ; top_k : int option [@jsonaf.option]
@@ -769,21 +956,38 @@ module Request = struct
     ; response_format : Response_format.t option [@jsonaf.option]
     ; structured_outputs : bool option [@jsonaf.option]
     ; modalities : string list option [@jsonaf.option]
+    ; audio : Audio.t option [@jsonaf.option]
+    ; image_config : Image_config.t option [@jsonaf.option]
     ; stream_options : Stream_options.t option [@jsonaf.option]
     ; service_tier : string option [@jsonaf.option]
     ; models : string list [@default []] [@jsonaf_drop_default.equal]
     ; transforms : string list [@default []] [@jsonaf_drop_default.equal]
     ; provider : Provider.t option [@jsonaf.option]
     }
-  [@@deriving jsonaf, sexp_of]
+  [@@deriving jsonaf, sexp]
+
+  module Non_streaming = struct
+    type nonrec t = [ `Non_streaming ] t [@@deriving jsonaf, sexp]
+  end
+
+  module Streaming = struct
+    type nonrec t = [ `Streaming ] t [@@deriving jsonaf, sexp]
+  end
 
   let create_body
         ~stream
+        ?cache_control
+        ?debug
         ?reasoning
         ?(tools = [])
         ?tool_choice
         ?parallel_tool_calls
         ?(plugins = [])
+        ?metadata
+        ?user
+        ?session_id
+        ?route
+        ?trace
         ?temperature
         ?top_p
         ?top_k
@@ -803,6 +1007,8 @@ module Request = struct
         ?response_format
         ?structured_outputs
         ?modalities
+        ?audio
+        ?image_config
         ?stream_options
         ?service_tier
         ?(models = [])
@@ -816,11 +1022,18 @@ module Request = struct
     { model
     ; messages
     ; stream
+    ; cache_control
+    ; debug
     ; reasoning
     ; tools
     ; tool_choice
     ; parallel_tool_calls
     ; plugins
+    ; metadata
+    ; user
+    ; session_id
+    ; route
+    ; trace
     ; temperature
     ; top_p
     ; top_k
@@ -840,6 +1053,8 @@ module Request = struct
     ; response_format
     ; structured_outputs
     ; modalities
+    ; audio
+    ; image_config
     ; stream_options
     ; service_tier
     ; models
@@ -849,11 +1064,17 @@ module Request = struct
   ;;
 
   let create
+        ?cache_control
         ?reasoning
         ?tools
         ?tool_choice
         ?parallel_tool_calls
         ?plugins
+        ?metadata
+        ?user
+        ?session_id
+        ?route
+        ?trace
         ?temperature
         ?top_p
         ?top_k
@@ -873,7 +1094,7 @@ module Request = struct
         ?response_format
         ?structured_outputs
         ?modalities
-        ?stream_options
+        ?image_config
         ?service_tier
         ?models
         ?transforms
@@ -885,11 +1106,17 @@ module Request = struct
     =
     create_body
       ~stream:false
+      ?cache_control
       ?reasoning
       ?tools
       ?tool_choice
       ?parallel_tool_calls
       ?plugins
+      ?metadata
+      ?user
+      ?session_id
+      ?route
+      ?trace
       ?temperature
       ?top_p
       ?top_k
@@ -909,7 +1136,7 @@ module Request = struct
       ?response_format
       ?structured_outputs
       ?modalities
-      ?stream_options
+      ?image_config
       ?service_tier
       ?models
       ?transforms
@@ -920,11 +1147,20 @@ module Request = struct
   ;;
 
   let create_streaming
+        ?debug
+        ?audio
+        ?stream_options
+        ?cache_control
         ?reasoning
         ?tools
         ?tool_choice
         ?parallel_tool_calls
         ?plugins
+        ?metadata
+        ?user
+        ?session_id
+        ?route
+        ?trace
         ?temperature
         ?top_p
         ?top_k
@@ -944,7 +1180,7 @@ module Request = struct
         ?response_format
         ?structured_outputs
         ?modalities
-        ?stream_options
+        ?image_config
         ?service_tier
         ?models
         ?transforms
@@ -956,11 +1192,18 @@ module Request = struct
     =
     create_body
       ~stream:true
+      ?cache_control
+      ?debug
       ?reasoning
       ?tools
       ?tool_choice
       ?parallel_tool_calls
       ?plugins
+      ?metadata
+      ?user
+      ?session_id
+      ?route
+      ?trace
       ?temperature
       ?top_p
       ?top_k
@@ -980,6 +1223,8 @@ module Request = struct
       ?response_format
       ?structured_outputs
       ?modalities
+      ?audio
+      ?image_config
       ?stream_options
       ?service_tier
       ?models
@@ -1001,7 +1246,7 @@ module Logprobs = struct
       ; logprob : float
       ; bytes : int list option [@default None]
       }
-    [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
   end
 
   module Token = struct
@@ -1011,14 +1256,14 @@ module Logprobs = struct
       ; bytes : int list option [@default None]
       ; top_logprobs : Top_logprob.t list [@default []]
       }
-    [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
   end
 
   type t =
     { content : Token.t list option [@default None]
     ; refusal : Token.t list option [@default None]
     }
-  [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+  [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 end
 
 module Response = struct
@@ -1030,7 +1275,7 @@ module Response = struct
         ; audio_tokens : int option [@default None]
         ; video_tokens : int option [@default None]
         }
-      [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
     end
 
     module Cost_details = struct
@@ -1039,7 +1284,7 @@ module Response = struct
         ; upstream_inference_prompt_cost : float option [@default None]
         ; upstream_inference_completions_cost : float option [@default None]
         }
-      [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
     end
 
     module Completion_tokens_details = struct
@@ -1048,12 +1293,12 @@ module Response = struct
         ; image_tokens : int option [@default None]
         ; audio_tokens : int option [@default None]
         }
-      [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
     end
 
     module Server_tool_use = struct
       type t = { web_search_requests : int option [@default None] }
-      [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
     end
 
     type t =
@@ -1067,7 +1312,7 @@ module Response = struct
       ; completion_tokens_details : Completion_tokens_details.t option [@default None]
       ; server_tool_use : Server_tool_use.t option [@default None]
       }
-    [@@deriving of_jsonaf, sexp_of, fields ~getters] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp, fields ~getters] [@@jsonaf.allow_extra_fields]
   end
 
   module Choice = struct
@@ -1078,7 +1323,7 @@ module Response = struct
       ; index : int
       ; message : Message.t
       }
-    [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 
     module Elide_image = struct
       type nonrec t = t =
@@ -1088,7 +1333,7 @@ module Response = struct
         ; index : int
         ; message : Message.Elide_image.t
         }
-      [@@deriving sexp_of]
+      [@@deriving sexp]
     end
   end
 
@@ -1103,7 +1348,7 @@ module Response = struct
     ; service_tier : string option [@default None]
     ; usage : Usage.t
     }
-  [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+  [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 
   module Elide_image = struct
     type nonrec t = t =
@@ -1117,7 +1362,7 @@ module Response = struct
       ; service_tier : string option
       ; usage : Usage.t
       }
-    [@@deriving sexp_of]
+    [@@deriving sexp]
   end
 end
 
@@ -1128,7 +1373,7 @@ module Stream_chunk = struct
         { name : string option [@default None] [@jsonaf_drop_default.equal]
         ; arguments : string option [@default None] [@jsonaf_drop_default.equal]
         }
-      [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
     end
 
     type t =
@@ -1138,13 +1383,15 @@ module Stream_chunk = struct
       ; function_ : Function_call.t option
             [@default None] [@jsonaf_drop_default.equal] [@key "function"]
       }
-    [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
   end
 
   module Delta = struct
     type t =
       { role : string option [@default None] [@jsonaf_drop_default.equal]
       ; content : string option [@default None] [@jsonaf_drop_default.equal]
+      ; audio : Audio_output.t option
+            [@default None] [@jsonaf_drop_default.equal] [@sexp_drop_default.equal]
       ; refusal : string option [@default None] [@jsonaf_drop_default.equal]
       ; reasoning : string option [@default None] [@jsonaf_drop_default.equal]
       ; reasoning_details : Reasoning_detail.t list
@@ -1156,12 +1403,13 @@ module Stream_chunk = struct
             [@default []] [@jsonaf_drop_default.equal]
       ; tool_calls : Tool_call_chunk.t list [@default []] [@jsonaf_drop_default.equal]
       }
-    [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 
     module Elide_image = struct
       type nonrec t = t =
         { role : string option
         ; content : string option
+        ; audio : Audio_output.t option
         ; refusal : string option
         ; reasoning : string option
         ; reasoning_details : Reasoning_detail.t list
@@ -1169,7 +1417,7 @@ module Stream_chunk = struct
         ; annotations : Jsonaf.t list
         ; tool_calls : Tool_call_chunk.t list
         }
-      [@@deriving sexp_of]
+      [@@deriving sexp]
     end
   end
 
@@ -1186,7 +1434,7 @@ module Stream_chunk = struct
            object. We keep this as raw JSON since OpenRouter doesn't document
            a stable schema for it. *)
       }
-    [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 
     (** [true] when this chunk represents a mid-stream upstream failure (i.e.
         [finish_reason = "error"]). *)
@@ -1202,9 +1450,10 @@ module Stream_chunk = struct
     ; choices : Choice.t list
     ; system_fingerprint : string option [@default None]
     ; service_tier : string option [@default None]
+    ; debug : Jsonaf.t option [@default None] [@sexp_drop_if Option.is_none]
     ; usage : Response.Usage.t option [@jsonaf.option]
     }
-  [@@deriving of_jsonaf, sexp_of] [@@jsonaf.allow_extra_fields]
+  [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 end
 
 let create ~api_key ?app_info ?on_response_body (request : [ `Non_streaming ] Request.t) =

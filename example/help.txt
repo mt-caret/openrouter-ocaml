@@ -11,21 +11,36 @@ OpenRouter API example client
                              . send X-OpenRouter-Experimental-Metadata: enabled
   . [-app-referer URL]       . value for HTTP-Referer header (app attribution)
   . [-app-title NAME]        . value for X-Title header (app attribution)
+  . [-audio-format FORMAT]   . request audio output format
+  . [-audio-voice VOICE]     . request audio output voice
+  . [-auto-router-allowed-model PATTERN] ...
+                             . restrict auto-router plugin to a model pattern
+  . [-auto-router]           . enable auto-router plugin
+  . [-cache-control-ttl TTL] . enable top-level automatic prompt caching with
+                               ttl (e.g. 5m, 1h)
   . [-cache-system-prompt TEXT]
                              . prepend a cached system-prompt content part with
                                cache_control = ephemeral (Anthropic-style prompt
                                caching)
   . [-context-compression]   . enable context-compression plugin
+  . [-debug-echo-upstream-body]
+                             . include transformed upstream request body in
+                               first stream debug chunk
+  . [-demo-function-strict]  . set strict=true on -demo-function-tool
+  . [-demo-function-tool]    . add a simple strict-capable function tool
   . [-fallback-model MODEL] ...
                              . fallback model id, in priority order (may be
                                repeated)
   . [-file PATH] ...         . attach a file (PDF or image)
   . [-frequency-penalty FLOAT]
                              . frequency penalty
+  . [-image-config KEY=JSON] ...
+                             . top-level image_config parameter
   . [-json-schema FILE]      . force output matching the JSON schema in FILE
   . [-json]                  . force JSON object output
                                (response_format=json_object)
   . [-log-level LEVEL]       . The log level (can be: Debug, Error, Info)
+  . [-log-request-to PATH]   . write the JSON request body before sending
   . [-log-response-to PATH]  . write the raw JSON response body to PATH
                                (non-streaming only); useful for capturing test
                                fixtures
@@ -37,19 +52,30 @@ OpenRouter API example client
                              . max completion tokens (modern alias for
                                -max-tokens)
   . [-max-tokens N]          . max tokens in completion
+  . [-metadata KEY=VALUE] ...
+                             . request metadata pair (may be repeated)
   . [-min-p FLOAT]           . min-p sampling cutoff
   . [-modality NAME] ...     . enable response modality (e.g. text, image; may
                                be repeated)
   . [-model MODEL]           . model to use (default: anthropic/claude-opus-4.7)
+  . [-moderation]            . enable moderation plugin
   . [-no-stream]             . disable streaming (use non-streaming API)
+  . [-pareto-min-coding-score FLOAT]
+                             . enable pareto-router plugin with minimum coding
+                               score
   . [-presence-penalty FLOAT]
                              . presence penalty
   . [-provider-data-collection MODE]
                              . allow|deny — restrict providers by
                                data-collection policy
+  . [-provider-enforce-distillable-text]
+                             . restrict routing to providers/models that allow
+                               text distillation
   . [-provider-ignore NAME] ...
                              . exclude this provider from routing (may be
                                repeated)
+  . [-provider-max-price-audio FLOAT]
+                             . max provider audio price
   . [-provider-no-fallbacks] . disable provider fallbacks (sets
                                allow_fallbacks=false)
   . [-provider-only NAME] ...
@@ -68,15 +94,55 @@ OpenRouter API example client
                                (xhigh|high|medium|low|minimal|none); mutually
                                exclusive with -reasoning
   . [-reasoning-exclude]     . hide reasoning from response output
+  . [-reasoning-summary VERBOSITY]
+                             . reasoning summary verbosity
+                               (auto|concise|detailed)
   . [-repetition-penalty FLOAT]
                              . repetition penalty
   . [-response-healing]      . enable response-healing plugin
+  . [-route ROUTE]           . deprecated route value
   . [-seed N]                . RNG seed for reproducibility
   . [-server-datetime]       . enable server-side openrouter:datetime tool
+  . [-server-image-generation-model MODEL]
+                             . image model for server-side image generation
+  . [-server-image-generation-param KEY=JSON] ...
+                             . provider-specific image generation parameter
+  . [-server-image-generation-prompt PROMPT]
+                             . prompt to pass to the server-side image
+                               generation tool
+  . [-server-image-generation]
+                             . enable server-side openrouter:image_generation
+                               tool
+  . [-server-search-models-max-results N]
+                             . maximum search-models tool results
+  . [-server-search-models]  . enable experimental server-side model-search tool
+  . [-server-web-fetch-allowed-domain DOMAIN] ...
+                             . restrict server web fetch URLs to domain
+  . [-server-web-fetch-blocked-domain DOMAIN] ...
+                             . exclude server web fetch URLs from domain
+  . [-server-web-fetch-engine ENGINE]
+                             . web fetch engine
+  . [-server-web-fetch-max-content-tokens N]
+                             . maximum fetched content tokens
+  . [-server-web-fetch-max-uses N]
+                             . maximum web fetch uses
   . [-server-web-fetch]      . enable server-side openrouter:web_fetch tool
+  . [-server-web-search-allowed-domain DOMAIN] ...
+                             . restrict server web search results to domain
+  . [-server-web-search-blocked-domain DOMAIN] ...
+                             . exclude domain from server web search results
+  . [-server-web-search-context-size SIZE]
+                             . web search context size (low|medium|high)
+  . [-server-web-search-engine ENGINE]
+                             . web search engine
+  . [-server-web-search-max-results N]
+                             . maximum results per web search call
+  . [-server-web-search-max-total-results N]
+                             . maximum total web search results
   . [-server-web-search]     . enable server-side openrouter:web_search tool
                                (model decides when to call)
   . [-service-tier TIER]     . service tier (e.g. auto, default, flex, priority)
+  . [-session-id ID]         . observability session id
   . [-stop STR] ...          . stop sequence (may be repeated, up to 4)
   . [-stream-usage]          . include final usage chunk in streaming responses
   . [-structured-outputs]    . set structured_outputs=true (strict-mode flag
@@ -86,8 +152,10 @@ OpenRouter API example client
   . [-top-k N]               . top-k sampling cutoff
   . [-top-logprobs N]        . return top-N logprobs per token
   . [-top-p FLOAT]           . nucleus sampling cutoff
+  . [-trace KEY=JSON] ...    . trace metadata pair (may be repeated)
   . [-transform NAME] ...    . message transform (e.g. middle-out; may be
                                repeated)
+  . [-user ID]               . unique user identifier
   . [-verbosity LEVEL]       . completion verbosity (low|medium|high|xhigh|max)
   . [-web-search]            . enable web search plugin
   embeddings                 . Get embeddings for one or more inputs (one per

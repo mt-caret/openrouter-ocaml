@@ -42,6 +42,25 @@ let api_key_from_env () =
 
 let default_model = "anthropic/claude-opus-4.7"
 
+let parse_key_value ~flag s =
+  match String.lsplit2 s ~on:'=' with
+  | Some (key, value) when not (String.is_empty key) -> Ok (key, value)
+  | _ -> Or_error.errorf "%s expects KEY=VALUE" flag
+;;
+
+let parse_key_json ~flag s =
+  let%map.Or_error key, value = parse_key_value ~flag s in
+  key, Or_error.ok (Jsonaf.parse value) |> Option.value ~default:(`String value)
+;;
+
+let key_values_or_error ~flag values =
+  Or_error.combine_errors (List.map values ~f:(parse_key_value ~flag))
+;;
+
+let key_json_values_or_error ~flag values =
+  Or_error.combine_errors (List.map values ~f:(parse_key_json ~flag))
+;;
+
 let chat_command =
   Command.async_or_error
     ~summary:"Send a chat completion request"
@@ -66,21 +85,118 @@ let chat_command =
             exclusive with -reasoning"
      and reasoning_exclude =
        flag "reasoning-exclude" no_arg ~doc:" hide reasoning from response output"
+     and reasoning_summary =
+       flag
+         "reasoning-summary"
+         (optional string)
+         ~doc:"VERBOSITY reasoning summary verbosity (auto|concise|detailed)"
      and web_search = flag "web-search" no_arg ~doc:" enable web search plugin"
+     and auto_router = flag "auto-router" no_arg ~doc:" enable auto-router plugin"
+     and auto_router_allowed_models =
+       flag
+         "auto-router-allowed-model"
+         (listed string)
+         ~doc:"PATTERN restrict auto-router plugin to a model pattern"
+     and moderation = flag "moderation" no_arg ~doc:" enable moderation plugin"
      and response_healing =
        flag "response-healing" no_arg ~doc:" enable response-healing plugin"
      and context_compression =
        flag "context-compression" no_arg ~doc:" enable context-compression plugin"
+     and pareto_min_coding_score =
+       flag
+         "pareto-min-coding-score"
+         (optional float)
+         ~doc:"FLOAT enable pareto-router plugin with minimum coding score"
      and server_web_search =
        flag
          "server-web-search"
          no_arg
          ~doc:
            " enable server-side openrouter:web_search tool (model decides when to call)"
+     and server_web_search_engine =
+       flag "server-web-search-engine" (optional string) ~doc:"ENGINE web search engine"
+     and server_web_search_max_results =
+       flag
+         "server-web-search-max-results"
+         (optional int)
+         ~doc:"N maximum results per web search call"
+     and server_web_search_max_total_results =
+       flag
+         "server-web-search-max-total-results"
+         (optional int)
+         ~doc:"N maximum total web search results"
+     and server_web_search_context_size =
+       flag
+         "server-web-search-context-size"
+         (optional string)
+         ~doc:"SIZE web search context size (low|medium|high)"
+     and server_web_search_allowed_domain =
+       flag
+         "server-web-search-allowed-domain"
+         (listed string)
+         ~doc:"DOMAIN restrict server web search results to domain"
+     and server_web_search_blocked_domain =
+       flag
+         "server-web-search-blocked-domain"
+         (listed string)
+         ~doc:"DOMAIN exclude domain from server web search results"
      and server_web_fetch =
        flag "server-web-fetch" no_arg ~doc:" enable server-side openrouter:web_fetch tool"
+     and server_web_fetch_engine =
+       flag "server-web-fetch-engine" (optional string) ~doc:"ENGINE web fetch engine"
+     and server_web_fetch_max_uses =
+       flag "server-web-fetch-max-uses" (optional int) ~doc:"N maximum web fetch uses"
+     and server_web_fetch_max_content_tokens =
+       flag
+         "server-web-fetch-max-content-tokens"
+         (optional int)
+         ~doc:"N maximum fetched content tokens"
+     and server_web_fetch_allowed_domain =
+       flag
+         "server-web-fetch-allowed-domain"
+         (listed string)
+         ~doc:"DOMAIN restrict server web fetch URLs to domain"
+     and server_web_fetch_blocked_domain =
+       flag
+         "server-web-fetch-blocked-domain"
+         (listed string)
+         ~doc:"DOMAIN exclude server web fetch URLs from domain"
      and server_datetime =
        flag "server-datetime" no_arg ~doc:" enable server-side openrouter:datetime tool"
+     and server_image_generation =
+       flag
+         "server-image-generation"
+         no_arg
+         ~doc:" enable server-side openrouter:image_generation tool"
+     and server_image_generation_model =
+       flag
+         "server-image-generation-model"
+         (optional string)
+         ~doc:"MODEL image model for server-side image generation"
+     and server_image_generation_prompt =
+       flag
+         "server-image-generation-prompt"
+         (optional string)
+         ~doc:"PROMPT prompt to pass to the server-side image generation tool"
+     and server_image_generation_param =
+       flag
+         "server-image-generation-param"
+         (listed string)
+         ~doc:"KEY=JSON provider-specific image generation parameter"
+     and server_search_models =
+       flag
+         "server-search-models"
+         no_arg
+         ~doc:" enable experimental server-side model-search tool"
+     and server_search_models_max_results =
+       flag
+         "server-search-models-max-results"
+         (optional int)
+         ~doc:"N maximum search-models tool results"
+     and demo_function_tool =
+       flag "demo-function-tool" no_arg ~doc:" add a simple strict-capable function tool"
+     and demo_function_strict =
+       flag "demo-function-strict" no_arg ~doc:" set strict=true on -demo-function-tool"
      and files = flag "file" (listed string) ~doc:"PATH attach a file (PDF or image)"
      and temperature =
        flag "temperature" (optional float) ~doc:"FLOAT sampling temperature"
@@ -129,8 +245,18 @@ let chat_command =
          ~doc:
            "TEXT prepend a cached system-prompt content part with cache_control = \
             ephemeral (Anthropic-style prompt caching)"
+     and cache_control_ttl =
+       flag
+         "cache-control-ttl"
+         (optional string)
+         ~doc:"TTL enable top-level automatic prompt caching with ttl (e.g. 5m, 1h)"
      and include_usage =
        flag "stream-usage" no_arg ~doc:" include final usage chunk in streaming responses"
+     and debug_echo_upstream_body =
+       flag
+         "debug-echo-upstream-body"
+         no_arg
+         ~doc:" include transformed upstream request body in first stream debug chunk"
      and service_tier =
        flag
          "service-tier"
@@ -183,6 +309,36 @@ let chat_command =
          "provider-require-parameters"
          no_arg
          ~doc:" require providers that support all request parameters"
+     and provider_enforce_distillable_text =
+       flag
+         "provider-enforce-distillable-text"
+         no_arg
+         ~doc:" restrict routing to providers/models that allow text distillation"
+     and provider_max_price_audio =
+       flag
+         "provider-max-price-audio"
+         (optional float)
+         ~doc:"FLOAT max provider audio price"
+     and metadata =
+       flag
+         "metadata"
+         (listed string)
+         ~doc:"KEY=VALUE request metadata pair (may be repeated)"
+     and user = flag "user" (optional string) ~doc:"ID unique user identifier"
+     and session_id =
+       flag "session-id" (optional string) ~doc:"ID observability session id"
+     and route = flag "route" (optional string) ~doc:"ROUTE deprecated route value"
+     and trace =
+       flag "trace" (listed string) ~doc:"KEY=JSON trace metadata pair (may be repeated)"
+     and audio_voice =
+       flag "audio-voice" (optional string) ~doc:"VOICE request audio output voice"
+     and audio_format =
+       flag "audio-format" (optional string) ~doc:"FORMAT request audio output format"
+     and image_config =
+       flag
+         "image-config"
+         (listed string)
+         ~doc:"KEY=JSON top-level image_config parameter"
      and json =
        flag "json" no_arg ~doc:" force JSON object output (response_format=json_object)"
      and json_schema_file =
@@ -217,6 +373,11 @@ let chat_command =
          ~doc:
            "PATH write the raw JSON response body to PATH (non-streaming only); useful \
             for capturing test fixtures"
+     and log_request_to =
+       flag
+         "log-request-to"
+         (optional Filename_unix.arg_type)
+         ~doc:"PATH write the JSON request body before sending"
      and log_stream_to =
        flag
          "log-stream-to"
@@ -259,9 +420,11 @@ let chat_command =
        in
        let%bind.Deferred.Or_error reasoning =
          Deferred.return
-           (match reasoning_tokens, reasoning_effort, reasoning_exclude with
-            | None, None, false -> Ok None
-            | max_tokens, effort, exclude ->
+           (match
+              reasoning_tokens, reasoning_effort, reasoning_exclude, reasoning_summary
+            with
+            | None, None, false, None -> Ok None
+            | max_tokens, effort, exclude, summary ->
               let%bind.Or_error effort =
                 match effort with
                 | None -> Ok None
@@ -274,9 +437,41 @@ let chat_command =
               in
               let exclude = if exclude then Some true else None in
               let%map.Or_error reasoning =
-                Completions.Request.Reasoning.create ?effort ?max_tokens ?exclude ()
+                Completions.Request.Reasoning.create
+                  ?effort
+                  ?max_tokens
+                  ?exclude
+                  ?summary
+                  ()
               in
               Some reasoning)
+       in
+       let%bind.Deferred.Or_error metadata =
+         Deferred.return (metadata |> key_values_or_error ~flag:"-metadata")
+       in
+       let%bind.Deferred.Or_error trace =
+         Deferred.return (trace |> key_json_values_or_error ~flag:"-trace")
+       in
+       let%bind.Deferred.Or_error image_config =
+         Deferred.return
+           (image_config
+            |> key_json_values_or_error ~flag:"-image-config"
+            |> Or_error.map ~f:(fun kvs -> `Object kvs))
+       in
+       let%bind.Deferred.Or_error server_image_generation_parameters =
+         Deferred.return
+           (server_image_generation_param
+            |> key_json_values_or_error ~flag:"-server-image-generation-param")
+       in
+       let%bind.Deferred.Or_error audio =
+         Deferred.return
+           (match audio_voice, audio_format with
+            | None, None -> Ok None
+            | Some voice, Some format ->
+              Ok (Some (Completions.Request.Audio.create ~voice ~format))
+            | _ ->
+              Or_error.error_string
+                "-audio-voice and -audio-format must be passed together")
        in
        let%bind.Deferred.Or_error verbosity =
          Deferred.return
@@ -311,13 +506,21 @@ let chat_command =
                   s
                 |> Or_error.map ~f:Option.some
             in
-            let list_or_none = function
-              | [] -> None
-              | xs -> Some xs
-            in
             let provider =
+              let max_price =
+                Option.map provider_max_price_audio ~f:(fun audio ->
+                  { Completions.Request.Provider.Max_price.prompt = None
+                  ; completion = None
+                  ; request = None
+                  ; image = None
+                  ; audio = Some audio
+                  })
+              in
               { Completions.Request.Provider.empty with
-                order = list_or_none provider_order
+                order =
+                  (match provider_order with
+                   | [] -> None
+                   | _ :: _ -> Some provider_order)
               ; allow_fallbacks =
                   (match provider_allow_fallbacks with
                    | true -> Some false
@@ -331,9 +534,20 @@ let chat_command =
                   (match provider_zdr with
                    | true -> Some true
                    | false -> None)
-              ; only = list_or_none provider_only
-              ; ignore = list_or_none provider_ignore
+              ; only =
+                  (match provider_only with
+                   | [] -> None
+                   | _ :: _ -> Some provider_only)
+              ; ignore =
+                  (match provider_ignore with
+                   | [] -> None
+                   | _ :: _ -> Some provider_ignore)
               ; sort
+              ; max_price
+              ; enforce_distillable_text =
+                  (match provider_enforce_distillable_text with
+                   | true -> Some true
+                   | false -> None)
               }
             in
             match Completions.Request.Provider.is_empty provider with
@@ -342,12 +556,19 @@ let chat_command =
        in
        let stream_options =
          match include_usage with
-         | true -> Some { Completions.Request.Stream_options.include_usage = Some true }
+         | true -> Some (Completions.Request.Stream_options.create ~include_usage:true ())
          | false -> None
        in
        let plugins =
          List.filter_opt
-           [ (match web_search with
+           [ (match auto_router, auto_router_allowed_models with
+              | false, [] -> None
+              | enabled, allowed_models ->
+                Some (Completions.Plugin.auto_router ~enabled ~allowed_models ()))
+           ; (match moderation with
+              | true -> Some Completions.Plugin.moderation
+              | false -> None)
+           ; (match web_search with
               | true -> Some (Completions.Plugin.web ())
               | false -> None)
            ; (match response_healing with
@@ -356,20 +577,87 @@ let chat_command =
            ; (match context_compression with
               | true -> Some Completions.Plugin.context_compression
               | false -> None)
+           ; Option.map pareto_min_coding_score ~f:(fun min_coding_score ->
+               Completions.Plugin.pareto_router ~min_coding_score ())
            ]
        in
        let server_tools =
          List.filter_opt
            [ (match server_web_search with
-              | true -> Some (Completions.Tool.web_search ())
+              | true ->
+                Some
+                  (Completions.Tool.web_search
+                     ?engine:server_web_search_engine
+                     ?max_results:server_web_search_max_results
+                     ?max_total_results:server_web_search_max_total_results
+                     ?search_context_size:server_web_search_context_size
+                     ~allowed_domains:server_web_search_allowed_domain
+                     ~blocked_domains:server_web_search_blocked_domain
+                     ())
               | false -> None)
            ; (match server_web_fetch with
-              | true -> Some (Completions.Tool.web_fetch ())
+              | true ->
+                Some
+                  (Completions.Tool.web_fetch
+                     ?engine:server_web_fetch_engine
+                     ?max_uses:server_web_fetch_max_uses
+                     ?max_content_tokens:server_web_fetch_max_content_tokens
+                     ~allowed_domains:server_web_fetch_allowed_domain
+                     ~blocked_domains:server_web_fetch_blocked_domain
+                     ())
               | false -> None)
            ; (match server_datetime with
               | true -> Some Completions.Tool.datetime
               | false -> None)
+           ; (match server_image_generation with
+              | true ->
+                Some
+                  (Completions.Tool.image_generation
+                     ?model:server_image_generation_model
+                     ?prompt:server_image_generation_prompt
+                     ~parameters:server_image_generation_parameters
+                     ())
+              | false -> None)
+           ; (match server_search_models with
+              | true ->
+                Some
+                  (Completions.Tool.search_models
+                     ?max_results:server_search_models_max_results
+                     ())
+              | false -> None)
+           ; (match demo_function_tool with
+              | false -> None
+              | true ->
+                Some
+                  (Completions.Tool.function_
+                     ~name:"lookup_code"
+                     ~description:"Look up a short code in a local table"
+                     ~parameters:
+                       (`Object
+                           [ "type", `String "object"
+                           ; ( "properties"
+                             , `Object
+                                 [ ( "code"
+                                   , `Object
+                                       [ "type", `String "string"
+                                       ; "description", `String "Code to look up"
+                                       ] )
+                                 ] )
+                           ; "required", `Array [ `String "code" ]
+                           ; "additionalProperties", `False
+                           ])
+                     ~strict:demo_function_strict
+                     ()))
            ]
+       in
+       let cache_control =
+         Option.map cache_control_ttl ~f:(fun ttl ->
+           Completions.Request.Cache_control.ephemeral ~ttl ())
+       in
+       let debug =
+         match debug_echo_upstream_body with
+         | true -> Some (Completions.Request.Debug.create ~echo_upstream_body:true ())
+         | false -> None
        in
        let app_info =
          Http.App_info.create
@@ -441,25 +729,35 @@ let chat_command =
            let all_parts = Option.to_list cache_system_part @ (text_part :: file_parts) in
            Deferred.Or_error.return (Completions.Request.Message.user_multipart all_parts)
        in
-       let list_or_none = function
-         | [] -> None
-         | xs -> Some xs
-       in
        let bool_flag b = if b then Some true else None in
        (* Bundle the args that don't depend on the streaming variant. *)
-       let stop = list_or_none stop in
        let logprobs = bool_flag logprobs in
        let structured_outputs = bool_flag structured_outputs in
-       let modalities = list_or_none modalities in
+       let%bind.Deferred.Or_error () =
+         Deferred.return
+           (match stream, debug, audio, stream_options with
+            | true, _, _, _ | false, None, None, None -> Ok ()
+            | false, _, _, _ ->
+              Or_error.error_string
+                "-debug-echo-upstream-body, -audio-voice/-audio-format, and \
+                 -stream-usage require streaming")
+       in
        match stream with
        | true ->
          let request =
            Completions.Request.create_streaming
              ~model
              ~messages:[ user_message ]
+             ?cache_control
+             ?debug
              ?reasoning
              ~tools:server_tools
              ~plugins
+             ~metadata
+             ?user
+             ?session_id
+             ?route
+             ~trace
              ?temperature
              ?top_p
              ?top_k
@@ -468,7 +766,7 @@ let chat_command =
              ?max_tokens
              ?max_completion_tokens
              ?seed
-             ?stop
+             ~stop
              ?frequency_penalty
              ?presence_penalty
              ?repetition_penalty
@@ -477,13 +775,25 @@ let chat_command =
              ?verbosity
              ?response_format
              ?structured_outputs
-             ?modalities
+             ~modalities
+             ?audio
+             ~image_config
              ?stream_options
              ?service_tier
              ~models:fallback_models
              ~transforms
              ?provider
              ()
+         in
+         let%bind () =
+           match log_request_to with
+           | None -> return ()
+           | Some path ->
+             Writer.save
+               path
+               ~contents:
+                 ([%jsonaf_of: [ `Streaming ] Completions.Request.t] request
+                  |> Jsonaf.to_string_hum)
          in
          let%bind log_writer =
            match log_stream_to with
@@ -542,9 +852,15 @@ let chat_command =
            Completions.Request.create
              ~model
              ~messages:[ user_message ]
+             ?cache_control
              ?reasoning
              ~tools:server_tools
              ~plugins
+             ~metadata
+             ?user
+             ?session_id
+             ?route
+             ~trace
              ?temperature
              ?top_p
              ?top_k
@@ -553,7 +869,7 @@ let chat_command =
              ?max_tokens
              ?max_completion_tokens
              ?seed
-             ?stop
+             ~stop
              ?frequency_penalty
              ?presence_penalty
              ?repetition_penalty
@@ -562,13 +878,23 @@ let chat_command =
              ?verbosity
              ?response_format
              ?structured_outputs
-             ?modalities
-             ?stream_options
+             ~modalities
+             ~image_config
              ?service_tier
              ~models:fallback_models
              ~transforms
              ?provider
              ()
+         in
+         let%bind () =
+           match log_request_to with
+           | None -> return ()
+           | Some path ->
+             Writer.save
+               path
+               ~contents:
+                 ([%jsonaf_of: [ `Non_streaming ] Completions.Request.t] request
+                  |> Jsonaf.to_string_hum)
          in
          let on_response_body =
            Option.map log_response_to ~f:(fun path body ->

@@ -46,21 +46,23 @@ Request fields covered:
 - **Output shape**: `response_format` (`json_object` | `json_schema`),
   `structured_outputs`, `modalities`, `stream_options`, `service_tier`.
 - **Reasoning**: `Reasoning.t` with `effort` (`Effort.t` variant), `max_tokens`,
-  `exclude`, `enabled`. `Reasoning.create` validates effort/max_tokens are
-  not both set (per OpenRouter contract).
+  `exclude`, `enabled`, `summary`. `Reasoning.create` validates effort/max_tokens
+  are not both set (per OpenRouter contract).
 - **Tools**: `Tool.t` is a variant — `Function | Web_search | Web_fetch |
-  Datetime | Image_generation`. Smart constructors `Tool.function_`,
-  `Tool.web_search`, etc.
+  Datetime | Image_generation | Search_models`. Smart constructors
+  `Tool.function_`, `Tool.web_search`, etc. OpenRouter server-tool payloads
+  use the current `parameters` wrappers.
 - **Tool choice**: `Auto | None_ | Required | Specific` (encodes as bare
   string or object — handled manually since it doesn't fit the
   `Json_helper.Make_tagged_union` pattern).
 - **Plugins**: `Plugin.t` variants — `Web | File_parser | Response_healing |
-  Context_compression`.
+  Context_compression | Auto_router | Moderation | Pareto_router`.
 - **Routing**: `models` (fallback list), `transforms`, `Provider.t` typed
   record with `order`, `allow_fallbacks`, `require_parameters`,
   `data_collection`, `zdr`, `only`, `ignore`, `quantizations`, `sort`,
-  `max_price`, `preferred_min_throughput`, `preferred_max_latency`. `Provider.empty`
-  + `Provider.is_empty` via derived `equal`.
+  `max_price`, `preferred_min_throughput`, `preferred_max_latency`,
+  `enforce_distillable_text`. `Provider.empty` + `Provider.is_empty` via
+  derived `equal`.
 - **Multimodal content parts**: `Text`, `Image_url`, `File`, `Input_audio`
   (base64 + format), `Video_url`. Each variant carries an optional
   `Cache_control.t` (Anthropic-style ephemeral prompt caching).
@@ -78,6 +80,7 @@ Every documented response field is parsed:
   `Server_tool_use.t`.
 - `Stream_chunk.Choice.t` carries an optional `error : Jsonaf.t option` and
   an `is_error : t -> bool` predicate for mid-stream upstream failures.
+  Streaming chunks also parse top-level `debug` and `delta.audio`.
 
 All response records carry `[@@jsonaf.allow_extra_fields]` so OpenRouter
 adding new fields doesn't break parsing.
@@ -106,15 +109,17 @@ escape hatch. Threaded as `?app_info` through every entry point.
 
 Each endpoint takes a `?on_response_body` / `?on_stream_chunk` callback
 invoked with the raw bytes before parsing — used by the example's
-`-log-response-to` / `-log-stream-to` flags to capture fixtures.
+`-log-request-to`, `-log-response-to`, and `-log-stream-to` flags to capture
+request/response fixtures and live-probe artifacts.
 
 ## Test infrastructure
 
 ```
 test/
 ├── dune
-├── test_request_serialization.ml      # JSON-shape snapshots (9 tests)
-├── test_response_parsing.ml            # fixture-based parsing (14 tests)
+├── test_request_serialization.ml      # JSON-shape snapshots (10 tests)
+├── fixture_helpers.ml                  # shared fixture parsing helpers
+├── test_*_fixtures.ml                  # fixture-based parsing by shape
 └── responses/
     ├── *.json                          # captured response bodies
     └── *.ndjson                        # captured stream chunks (one per line)
@@ -122,22 +127,27 @@ test/
 
 **Request-side snapshots** (`test_request_serialization.ml`): build a
 request via the smart constructors, snapshot the JSON we'd send. Currently
-9 tests covering minimal, function-tool + tool_choice, multi-message tool
-result chains, streaming + web-search plugin, file attachment, file-parser
-plugin, audio + video, cache_control, full provider routing.
+10 tests covering minimal, strict function-tool + tool_choice, multi-message
+tool result chains, streaming + web-search plugin, file attachment,
+file-parser plugin, audio + video, content-part cache_control, full provider
+routing (including distillable/audio-price routing), and current OpenAPI chat
+knobs/server tools.
 
-**Response-side fixtures** (`test_response_parsing.ml`): load real captured
-JSON, parse via `Completions.For_testing.response_of_jsonaf`, snapshot the
-sexp. 14 tests including:
+**Response-side fixtures** (`test_*_fixtures.ml`): load real captured
+JSON/NDJSON through `fixture_helpers.ml`, parse via endpoint-specific
+`For_testing` parsers, snapshot the sexp or a compact summary for large
+fixtures. 17 tests including:
 
 - Bedrock with `system_fingerprint: null` (regression guard for the original
   parser bug),
 - OpenAI logprobs (full `Logprobs.t` shape),
+- Anthropic prompt-cache hit (`cached_tokens > 0`),
 - Three reasoning shapes (Anthropic text+signature, DeepSeek text-only,
   OpenAI encrypted-data),
 - Web search annotations,
 - Image output (Gemini),
-- Three streaming variants (simple, reasoning chunks, with usage),
+- Five streaming variants (simple, reasoning chunks, with usage, debug
+  `echo_upstream_body`, audio output),
 - Embeddings, models list (367-model summary), generation stats,
   Api_error.
 
@@ -177,7 +187,7 @@ In rough chronological order:
    `[@@jsonaf.allow_extra_fields]` everywhere, properly modelled `Logprobs.t`,
    relaxed `Image.t.index`.
 4. **Fixture-based test directory** — `test/`, `For_testing` submodules,
-   capture hooks on every endpoint, 14 fixture-driven tests.
+   capture hooks on every endpoint, 17 fixture-driven tests.
 5. **`String_variant.Make` functor** — replaces hand-rolled
    to_string/of_string for nullary variants.
 6. **`Tagged_union.{to,of}_jsonaf`** — replaces hand-rolled `match
@@ -185,7 +195,8 @@ In rough chronological order:
 7. **Provider routing** — typed `Provider.t` record, every documented
    sub-field, `empty` + `is_empty`.
 8. **Server-side tools** — `Tool.t` refactored to variant covering
-   `openrouter:web_search/web_fetch/datetime/image_generation`.
+   `openrouter:web_search/web_fetch/datetime/image_generation` and
+   `openrouter:experimental__search_models`.
 9. **Cache control on content parts**, `Plugin.Response_healing`,
    `Plugin.Context_compression`.
 10. **Audio + video content parts** — `Input_audio` (base64 + format),
@@ -199,6 +210,14 @@ In rough chronological order:
 14. **Phantom-typed `'tag Request.t`** — type system enforces
     streaming/non-streaming consistency. JSON-shape inline tests moved to
     `test/test_request_serialization.ml`.
+15. **Current OpenRouter chat extensions** — top-level `cache_control`,
+    `debug`, `metadata`, `user`, `session_id`, `route`, `trace`, `audio`,
+    `image_config`, reasoning `summary`, strict tools, provider distillation
+    routing/audio max price, server-tool `parameters`, and auto-router /
+    moderation / pareto-router plugins.
+16. **Live response fixtures for new shapes** — cache-hit usage, debug stream
+    chunks with `choices=[]`, and streaming audio output with `delta.audio`
+    and `audio_tokens`.
 
 ## Out of scope (per project decisions)
 
@@ -208,27 +227,70 @@ In rough chronological order:
 
 ## Remaining work
 
+### OpenAPI audit (2026-05-12)
+
+The live `https://openrouter.ai/openapi.json` surface is broader than this
+library's current inference-client scope. Implemented endpoints remain:
+`/chat/completions`, `/embeddings`, `/models`, and `/generation`.
+
+The spec also lists management and adjacent-product endpoints that are not
+covered here: activity, credits, key/auth/key management, guardrails,
+organization/workspace management, provider/endpoints discovery beyond model
+listing, rerank, audio speech/transcription, video generation, Anthropic
+Messages, and the beta `/responses` API. Treat those as explicit future work,
+not accidental omissions in the current chat client.
+
+The chat request shape has been refreshed against the current spec with:
+top-level `cache_control`, `debug`, `metadata`, `user`, `session_id`, `route`,
+`trace`, `audio`, `image_config`, reasoning `summary`, provider
+`enforce_distillable_text`, provider max audio price, current server-tool
+`parameters` wrappers, and the `auto-router` / `moderation` / `pareto-router`
+plugins. The request snapshot
+`"request: current OpenAPI chat knobs + server tools"` is the regression guard
+for these wire shapes.
+
 ### Documentation
 
-- **README.md is stale.** It mentions only chat/embeddings/list-models and
-  doesn't reflect the smart constructors, phantom types, plugin/server-tool
-  surface, or cache control. Worth a substantial rewrite.
-- A short *quickstart* example in the README built around `Request.create` +
-  `Completions.create` would be useful (the existing CLI example is more of
-  a demo than a usage tutorial).
+- README.md has been rewritten around `Request.create`, phantom streaming
+  tags, server tools/plugins, multimodal content, capture hooks, and the
+  current endpoint coverage boundary. Keep it in sync when expanding the
+  surface beyond inference endpoints.
+
+### Live verification (2026-05-12)
+
+The example binary now has flags for every chat-field addition above, and live
+probes were run through the binary with request logging enabled. Verified
+paths include:
+
+- `openrouter:experimental__search_models`, `openrouter:web_search`,
+  `openrouter:web_fetch`, `openrouter:datetime`, and
+  `openrouter:image_generation` request serialization. Search/web fetch/search
+  tools returned successful chat responses; image-generation tool requests were
+  accepted but the server tool returned model/tool errors without an image.
+- `auto-router`, `moderation`, `pareto-router`, `metadata`, `user`,
+  `session_id`, and `trace`.
+- Strict function tools (`strict: true`) with a live `tool_calls` response.
+- Top-level `cache_control` and content-part cache control against direct
+  Anthropic routing. Large repeated probes produced both `cache_write_tokens`
+  and `cached_tokens`; `cache_hit.json` captures the cache-hit response.
+- `debug.echo_upstream_body` streaming, captured in
+  `debug_echo_upstream_body.ndjson`.
+- Audio output with `modalities=["text"; "audio"]` and `audio.format="pcm16"`
+  on `openai/gpt-audio-mini`; `stream_audio_output.ndjson` captures
+  `delta.audio` transcript/data/expires-at chunks and nonzero audio tokens.
+- `provider.enforce_distillable_text` on `openrouter/auto`, Qwen, Llama,
+  Mistral, and DeepSeek distill models. The same flag correctly rejected an
+  Inclusion model with "No endpoints found with models that allow text
+  distillation."
+- `image_config` with Gemini image output. The pre-existing image-output
+  fixture already covers the response shape, so no duplicate model-only
+  fixture was added.
 
 ### Hard-to-reproduce edge cases
 
 These have lib-side support but no live fixture because the relevant
 upstream behaviour isn't reliably triggerable through OpenRouter:
 
-- **Prompt cache hits.** `cache_control` ships correctly on content parts;
-  the request-side wire format is regression-tested. But OpenRouter doesn't
-  appear to pass the directive through to providers reliably — the live
-  test never produced `usage.prompt_tokens_details.cached_tokens > 0`, even
-  via `provider.only=["Anthropic"]` (which routes around Bedrock). Worth
-  re-checking periodically; the test would be a fixture with a populated
-  `cached_tokens` field.
 - **Mid-stream error.** `Stream_chunk.Choice.is_error` and the optional
   `error` field exist. Reproducing requires an upstream provider failure
   mid-generation; we'd want a fixture showing `finish_reason: "error"` on
@@ -241,28 +303,12 @@ upstream behaviour isn't reliably triggerable through OpenRouter:
   populate this counter — possibly provider-dependent. We have a fixture
   showing the (empty) field; a populated one would be nice.
 
-### Smaller polish
-
-- **`list_or_none` helper duplicated** in `example/openrouter_api_example.ml`
-  (defined inside the provider construction block AND the main request
-  construction block). Lift to a top-level helper.
-- **Type aliases for clarity**: `Request.Non_streaming.t = [`Non_streaming]
-  Request.t` and `Request.Streaming.t = [`Streaming] Request.t` would
-  let users write `Request.Non_streaming.t` instead of the raw polymorphic
-  variant. Trivial addition.
-- **`Stream_options.create`** for symmetry with the other smart
-  constructors. One-field type so the value is small, but consistency is
-  free.
-
 ### Possible future investigations
 
 - **Compile-fail tests.** The phantom-type guarantees are nice but
   un-asserted in the test suite. A `dune` rule that compiles a known-broken
   fixture and asserts it fails would close the loop. (Requires a bit of
   dune machinery; not standard practice in this codebase.)
-- **Audio fixture.** We confirmed audio input works end-to-end against
-  Gemini, but didn't capture a fixture showing the audio-input *response*
-  shape. A small WAV → response capture would be nice.
 - **More provider/model coverage in the live sweep.** Currently 10
   providers; expanding would catch shape drift from new providers. Cheap
   to extend `/tmp/probe-models.sh` if it ever falls into version control.

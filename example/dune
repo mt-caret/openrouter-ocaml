@@ -6,7 +6,7 @@
   core_unix.command_unix
   textutils.ascii_table)
  (preprocess
-  (pps ppx_jane)))
+  (pps ppx_jane ppx_jsonaf_conv)))
 
 (rule
  (target help.txt)

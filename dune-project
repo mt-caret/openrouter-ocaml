@@ -1,5 +1,7 @@
 (lang dune 3.22)
 
+(using mdx 0.4)
+
 (name openrouter_api)
 
 (generate_opam_files true)
@@ -13,16 +15,20 @@
 
 (license MIT)
 
-(documentation https://github.com/mt-caret/openrouter-ocaml)
+(documentation https://mt-caret.github.io/openrouter-ocaml/)
 
 (package
  (name openrouter_api)
  (synopsis "OCaml client for the OpenRouter API")
  (description
-  "An Async-based OCaml client for OpenRouter (https://openrouter.ai), a unified API for LLMs from multiple providers (Anthropic, OpenAI, Google, and others). Covers chat completions (with streaming, tools, plugins, and structured outputs), text embeddings, and model listing.")
+  "An Async-based OCaml client for OpenRouter (https://openrouter.ai), a unified API for LLMs from multiple providers (Anthropic, OpenAI, Google, and others). Covers chat completions (with streaming, tools, plugins, multimodal content, provider routing, reasoning, and structured outputs), text embeddings, model listing, and generation stats.")
  (depends
   (ocaml
    (>= 5.4.1))
+  (mdx
+   (and
+    :with-test
+    (>= 2.3.0)))
   ppx_jsonaf_conv
   ppx_jane
   ppx_typed_fields

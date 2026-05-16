@@ -18,7 +18,7 @@ module Model_info : sig
       ; input_cache_write : float option
       ; discount : float option
       }
-    [@@fields.no_zero_alloc] [@@deriving fields ~getters, sexp_of]
+    [@@fields.no_zero_alloc] [@@deriving fields ~getters, sexp]
   end
 
   module Architecture : sig
@@ -29,7 +29,7 @@ module Model_info : sig
       ; input_modalities : string list
       ; output_modalities : string list
       }
-    [@@deriving fields ~getters, sexp_of]
+    [@@deriving fields ~getters, sexp]
   end
 
   module Top_provider : sig
@@ -38,7 +38,7 @@ module Model_info : sig
       ; max_completion_tokens : int option
       ; is_moderated : bool
       }
-    [@@deriving fields ~getters, sexp_of]
+    [@@deriving fields ~getters, sexp]
   end
 
   module Per_request_limits : sig
@@ -46,7 +46,7 @@ module Model_info : sig
       { prompt_tokens : float
       ; completion_tokens : float
       }
-    [@@fields.no_zero_alloc] [@@deriving fields ~getters, sexp_of]
+    [@@fields.no_zero_alloc] [@@deriving fields ~getters, sexp]
   end
 
   module Default_parameters : sig
@@ -58,11 +58,11 @@ module Model_info : sig
       ; presence_penalty : float option
       ; repetition_penalty : float option
       }
-    [@@fields.no_zero_alloc] [@@deriving fields ~getters, sexp_of]
+    [@@fields.no_zero_alloc] [@@deriving fields ~getters, sexp]
   end
 
   module Links : sig
-    type t = { details : string option } [@@deriving fields ~getters, sexp_of]
+    type t = { details : string option } [@@deriving fields ~getters, sexp]
   end
 
   type t =
@@ -83,11 +83,11 @@ module Model_info : sig
     ; expiration_date : string option
     ; links : Links.t option
     }
-  [@@deriving fields ~getters, sexp_of]
+  [@@deriving fields ~getters, sexp]
 end
 
 module Response : sig
-  type t = { data : Model_info.t list } [@@deriving sexp_of]
+  type t = { data : Model_info.t list } [@@deriving sexp]
 end
 
 val list

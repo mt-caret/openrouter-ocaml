@@ -1,6 +1,8 @@
 open! Core
 open! Async
 
+(** Chat completions and streaming chat completions. *)
+
 module Reasoning_detail : sig
   type t =
     { format : string option
@@ -10,12 +12,12 @@ module Reasoning_detail : sig
     ; signature : string option
     ; data : string option
     }
-  [@@deriving sexp_of]
+  [@@deriving sexp]
 end
 
 module Image : sig
   module Image_url : sig
-    type t = { url : string } [@@deriving sexp_of]
+    type t = { url : string } [@@deriving sexp]
   end
 
   type t =
@@ -23,11 +25,21 @@ module Image : sig
     ; image_url : Image_url.t
     ; index : int option
     }
-  [@@deriving sexp_of]
+  [@@deriving sexp]
 
   module Elide_data : sig
-    type nonrec t = t [@@deriving sexp_of]
+    type nonrec t = t [@@deriving sexp]
   end
+end
+
+module Audio_output : sig
+  type t =
+    { id : string option
+    ; data : string option
+    ; expires_at : int option
+    ; transcript : string option
+    }
+  [@@deriving sexp]
 end
 
 (** Tool definition for function calling and OpenRouter server-side tools.
@@ -40,18 +52,21 @@ module Tool : sig
       { name : string
       ; description : string option
       ; parameters : Jsonaf.t option
+      ; strict : bool option
       }
-    [@@deriving sexp_of]
+    [@@deriving sexp]
   end
 
   module Web_search : sig
     type t =
       { engine : string option
+      ; max_results : int option
       ; max_total_results : int option
+      ; search_context_size : string option
       ; allowed_domains : string list option
       ; blocked_domains : string list option
       }
-    [@@deriving sexp_of]
+    [@@deriving sexp]
   end
 
   module Web_fetch : sig
@@ -62,11 +77,20 @@ module Tool : sig
       ; allowed_domains : string list option
       ; blocked_domains : string list option
       }
-    [@@deriving sexp_of]
+    [@@deriving sexp]
   end
 
   module Image_generation : sig
-    type t = { prompt : string option } [@@deriving sexp_of]
+    type t =
+      { model : string option
+      ; prompt : string option
+      ; parameters : (string * Jsonaf.t) list
+      }
+    [@@deriving sexp]
+  end
+
+  module Search_models : sig
+    type t = { max_results : int option } [@@deriving sexp]
   end
 
   type t =
@@ -75,13 +99,22 @@ module Tool : sig
     | Web_fetch of Web_fetch.t
     | Datetime
     | Image_generation of Image_generation.t
-  [@@deriving jsonaf, sexp_of]
+    | Search_models of Search_models.t
+  [@@deriving jsonaf, sexp]
 
-  val function_ : name:string -> ?description:string -> ?parameters:Jsonaf.t -> unit -> t
+  val function_
+    :  name:string
+    -> ?description:string
+    -> ?parameters:Jsonaf.t
+    -> ?strict:bool
+    -> unit
+    -> t
 
   val web_search
     :  ?engine:string
+    -> ?max_results:int
     -> ?max_total_results:int
+    -> ?search_context_size:string
     -> ?allowed_domains:string list
     -> ?blocked_domains:string list
     -> unit
@@ -97,21 +130,29 @@ module Tool : sig
     -> t
 
   val datetime : t
-  val image_generation : ?prompt:string -> unit -> t
+
+  val image_generation
+    :  ?model:string
+    -> ?prompt:string
+    -> ?parameters:(string * Jsonaf.t) list
+    -> unit
+    -> t
+
+  val search_models : ?max_results:int -> unit -> t
 end
 
 (** Tool choice configuration *)
 module Tool_choice : sig
   module Function_choice : sig
-    type t = { name : string } [@@deriving sexp_of]
+    type t = { name : string } [@@deriving sexp]
   end
 
   module Specific : sig
-    type t =
+    type t = private
       { type_ : string
       ; function_ : Function_choice.t
       }
-    [@@deriving sexp_of]
+    [@@deriving sexp]
   end
 
   type t =
@@ -119,7 +160,7 @@ module Tool_choice : sig
     | None_
     | Required
     | Specific of Specific.t
-  [@@deriving jsonaf, sexp_of]
+  [@@deriving jsonaf, sexp]
 
   val auto : t
   val none : t
@@ -134,7 +175,7 @@ module Tool_call : sig
       { name : string
       ; arguments : string
       }
-    [@@deriving sexp_of]
+    [@@deriving sexp]
   end
 
   type t =
@@ -142,18 +183,26 @@ module Tool_call : sig
     ; type_ : string
     ; function_ : Function_call.t
     }
-  [@@deriving sexp_of]
+  [@@deriving sexp]
 end
 
 (** Plugin configuration for OpenRouter plugins. See
     https://openrouter.ai/docs/guides/features/plugins/overview *)
 module Plugin : sig
+  module Auto_router : sig
+    type t =
+      { enabled : bool option
+      ; allowed_models : string list option
+      }
+    [@@deriving sexp]
+  end
+
   module Web : sig
     type t =
       { enabled : bool option
       ; max_results : int option
       }
-    [@@deriving sexp_of]
+    [@@deriving sexp]
   end
 
   module Pdf_engine : sig
@@ -161,28 +210,42 @@ module Plugin : sig
       | Pdf_text
       | Mistral_ocr
       | Native
-    [@@deriving sexp_of]
+    [@@deriving sexp]
   end
 
   module File_parser : sig
     module Pdf_config : sig
-      type t = { engine : Pdf_engine.t } [@@deriving sexp_of]
+      type t = { engine : Pdf_engine.t } [@@deriving sexp]
     end
 
-    type t = { pdf : Pdf_config.t option } [@@deriving sexp_of]
+    type t = { pdf : Pdf_config.t option } [@@deriving sexp]
+  end
+
+  module Pareto_router : sig
+    type t =
+      { enabled : bool option
+      ; min_coding_score : float option
+      }
+    [@@deriving sexp]
   end
 
   type t =
+    | Auto_router of Auto_router.t
+    | Moderation
     | Web of Web.t
     | File_parser of File_parser.t
     | Response_healing
     | Context_compression
-  [@@deriving jsonaf, sexp_of]
+    | Pareto_router of Pareto_router.t
+  [@@deriving jsonaf, sexp]
 
+  val auto_router : ?enabled:bool -> ?allowed_models:string list -> unit -> t
   val web : ?enabled:bool -> ?max_results:int -> unit -> t
   val file_parser : ?pdf_engine:Pdf_engine.t -> unit -> t
+  val moderation : t
   val response_healing : t
   val context_compression : t
+  val pareto_router : ?enabled:bool -> ?min_coding_score:float -> unit -> t
 end
 
 (** URL citation from web search results. *)
@@ -194,7 +257,7 @@ module Citation : sig
     ; start_index : int option
     ; end_index : int option
     }
-  [@@deriving sexp_of]
+  [@@deriving sexp]
 
   (** Parse a citation from an annotation JSON object *)
   val of_annotation_jsonaf : Jsonaf.t -> t option
@@ -204,6 +267,7 @@ module Message : sig
   type t =
     { role : string
     ; content : string option
+    ; audio : Audio_output.t option
     ; refusal : string option
     ; reasoning : string option
     ; reasoning_details : Reasoning_detail.t list
@@ -212,10 +276,10 @@ module Message : sig
     ; tool_calls : Tool_call.t list
     ; tool_call_id : string option
     }
-  [@@deriving sexp_of]
+  [@@deriving sexp]
 
   module Elide_image : sig
-    type nonrec t = t [@@deriving sexp_of]
+    type nonrec t = t [@@deriving sexp]
   end
 end
 
@@ -227,7 +291,7 @@ module Request : sig
           { name : string
           ; arguments : string
           }
-        [@@deriving sexp_of]
+        [@@deriving sexp]
       end
 
       type t =
@@ -235,7 +299,7 @@ module Request : sig
         ; type_ : string
         ; function_ : Function_call.t
         }
-      [@@deriving sexp_of]
+      [@@deriving sexp]
     end
 
     module Content_part : sig
@@ -243,11 +307,11 @@ module Request : sig
           and successive identical-prefix requests will hit the cache, yielding
           a non-zero [usage.prompt_tokens_details.cached_tokens]. *)
       module Cache_control : sig
-        type t =
+        type t = private
           { type_ : string (** Always ["ephemeral"]. *)
           ; ttl : string option
           }
-        [@@deriving sexp_of]
+        [@@deriving sexp]
 
         val ephemeral : ?ttl:string -> unit -> t
       end
@@ -257,19 +321,19 @@ module Request : sig
           { text : string
           ; cache_control : Cache_control.t option
           }
-        [@@deriving sexp_of]
+        [@@deriving sexp]
       end
 
       module Image_url : sig
         module Url : sig
-          type t = { url : string } [@@deriving sexp_of]
+          type t = { url : string } [@@deriving sexp]
         end
 
         type t =
           { image_url : Url.t
           ; cache_control : Cache_control.t option
           }
-        [@@deriving sexp_of]
+        [@@deriving sexp]
       end
 
       module File : sig
@@ -278,14 +342,14 @@ module Request : sig
             { filename : string
             ; file_data : string
             }
-          [@@deriving sexp_of]
+          [@@deriving sexp]
         end
 
         type t =
           { file : Data.t
           ; cache_control : Cache_control.t option
           }
-        [@@deriving sexp_of]
+        [@@deriving sexp]
       end
 
       module Input_audio : sig
@@ -294,26 +358,26 @@ module Request : sig
             { data : string (** Base64-encoded audio bytes (no [data:] prefix). *)
             ; format : string (** e.g. "wav", "mp3", "aiff", "aac", "ogg", "flac". *)
             }
-          [@@deriving sexp_of]
+          [@@deriving sexp]
         end
 
         type t =
           { input_audio : Data.t
           ; cache_control : Cache_control.t option
           }
-        [@@deriving sexp_of]
+        [@@deriving sexp]
       end
 
       module Video_url : sig
         module Url : sig
-          type t = { url : string } [@@deriving sexp_of]
+          type t = { url : string } [@@deriving sexp]
         end
 
         type t =
           { video_url : Url.t
           ; cache_control : Cache_control.t option
           }
-        [@@deriving sexp_of]
+        [@@deriving sexp]
       end
 
       type t =
@@ -322,7 +386,7 @@ module Request : sig
         | File of File.t
         | Input_audio of Input_audio.t
         | Video_url of Video_url.t
-      [@@deriving sexp_of]
+      [@@deriving sexp]
 
       val text : ?cache_control:Cache_control.t -> string -> t
 
@@ -366,19 +430,19 @@ module Request : sig
       type t =
         | Text of string
         | Multipart of Content_part.t list
-      [@@deriving sexp_of]
+      [@@deriving sexp]
 
       val text : string -> t
       val multipart : Content_part.t list -> t
     end
 
-    type t =
+    type t = private
       { role : string
       ; content : Content.t option
       ; tool_calls : Tool_call.t list
       ; tool_call_id : string option
       }
-    [@@deriving jsonaf, sexp_of]
+    [@@deriving jsonaf_of, sexp]
 
     val user : string -> t
     val user_multipart : Content_part.t list -> t
@@ -396,7 +460,7 @@ module Request : sig
         | Low
         | Minimal
         | None_
-      [@@deriving jsonaf, sexp_of]
+      [@@deriving jsonaf, sexp]
 
       (** [of_string] raises [Jsonaf_kernel.Conv.Of_jsonaf_error] on unknown values. *)
       include Stringable.S with type t := t
@@ -406,13 +470,14 @@ module Request : sig
         both. Pass [enabled = Some true] alone to enable reasoning with provider
         defaults. Pass [exclude = Some true] to keep reasoning hidden from the
         response while the model still uses it internally. *)
-    type t =
+    type t = private
       { effort : Effort.t option
       ; max_tokens : int option
       ; exclude : bool option
       ; enabled : bool option
+      ; summary : string option
       }
-    [@@deriving jsonaf, sexp_of]
+    [@@deriving jsonaf_of, sexp]
 
     (** Validates [effort] and [max_tokens] are not both set, matching the
         wire contract. Returns an [Or_error] so the failure surfaces locally
@@ -422,6 +487,7 @@ module Request : sig
       -> ?max_tokens:int
       -> ?exclude:bool
       -> ?enabled:bool
+      -> ?summary:string
       -> unit
       -> t Or_error.t
   end
@@ -433,14 +499,54 @@ module Request : sig
       | High
       | Xhigh
       | Max
-    [@@deriving jsonaf, sexp_of]
+    [@@deriving jsonaf, sexp]
 
     (** [of_string] raises [Jsonaf_kernel.Conv.Of_jsonaf_error] on unknown values. *)
     include Stringable.S with type t := t
   end
 
   module Stream_options : sig
-    type t = { include_usage : bool option } [@@deriving jsonaf, sexp_of]
+    type t = { include_usage : bool option } [@@deriving jsonaf, sexp]
+
+    val create : ?include_usage:bool -> unit -> t
+  end
+
+  module Audio : sig
+    type t =
+      { voice : string
+      ; format : string
+      }
+    [@@deriving jsonaf, sexp]
+
+    val create : voice:string -> format:string -> t
+  end
+
+  module Debug : sig
+    type t = { echo_upstream_body : bool option } [@@deriving jsonaf, sexp]
+
+    val create : ?echo_upstream_body:bool -> unit -> t
+  end
+
+  module Image_config : sig
+    type t = Jsonaf.t [@@deriving jsonaf, sexp]
+  end
+
+  module Metadata : sig
+    type t = (string * string) list [@@deriving jsonaf, sexp]
+  end
+
+  module Trace : sig
+    type t = (string * Jsonaf.t) list [@@deriving jsonaf, sexp]
+  end
+
+  module Cache_control : sig
+    type t = private
+      { type_ : string
+      ; ttl : string option
+      }
+    [@@deriving sexp]
+
+    val ephemeral : ?ttl:string -> unit -> t
   end
 
   module Provider : sig
@@ -449,7 +555,7 @@ module Request : sig
         | Price
         | Throughput
         | Latency
-      [@@deriving equal, sexp_of]
+      [@@deriving equal, sexp]
 
       include Stringable.S with type t := t
       include Jsonaf.Jsonafable.S with type t := t
@@ -459,7 +565,7 @@ module Request : sig
       type t =
         | Allow
         | Deny
-      [@@deriving equal, sexp_of]
+      [@@deriving equal, sexp]
 
       include Stringable.S with type t := t
       include Jsonaf.Jsonafable.S with type t := t
@@ -471,8 +577,9 @@ module Request : sig
         ; completion : float option
         ; request : float option
         ; image : float option
+        ; audio : float option
         }
-      [@@deriving equal, jsonaf, sexp_of]
+      [@@deriving equal, jsonaf, sexp]
     end
 
     type t =
@@ -488,8 +595,9 @@ module Request : sig
       ; max_price : Max_price.t option
       ; preferred_min_throughput : float option
       ; preferred_max_latency : float option
+      ; enforce_distillable_text : bool option
       }
-    [@@deriving equal, jsonaf, sexp_of]
+    [@@deriving equal, jsonaf, sexp]
 
     (** All-[None] record — equivalent to omitting the [provider] field
         entirely, used as a base for callers that build the record one
@@ -504,7 +612,7 @@ module Request : sig
   module Logit_bias : sig
     (** Map from token id (as a string, per the OpenAI/OpenRouter wire format) to
         bias in [-100, 100]. *)
-    type t = (string * int) list [@@deriving jsonaf, sexp_of]
+    type t = (string * int) list [@@deriving jsonaf, sexp]
   end
 
   (** Response format for structured outputs. See
@@ -517,13 +625,13 @@ module Request : sig
         ; schema : Jsonaf.t option
         ; description : string option
         }
-      [@@deriving jsonaf, sexp_of]
+      [@@deriving jsonaf, sexp]
     end
 
     type t =
       | Json_object
       | Json_schema of Json_schema.t
-    [@@deriving jsonaf, sexp_of]
+    [@@deriving jsonaf, sexp]
 
     val json_schema
       :  ?strict:bool
@@ -534,22 +642,29 @@ module Request : sig
       -> t
   end
 
-  (** A request body, phantom-tagged with its streaming kind. The tag is
-      enforced by [Completions.create] (which requires [`Non_streaming]) and
-      [Completions.create_stream] (which requires [`Streaming]) — you can't
-      hand a streaming request to the non-streaming entry point or vice
-      versa. Construct via [create] / [create_streaming]; serialize via the
-      [%jsonaf_of: [`Non_streaming] Request.t] extension form. *)
-  type 'tag t [@@deriving jsonaf, sexp_of]
+  (** Abstract request body, phantom-tagged by streaming kind. *)
+  type 'tag t [@@deriving jsonaf_of, sexp]
 
-  (** Shared shape of [create] and [create_streaming]. Required: [~model] and
-      [~messages]; everything else defaults. *)
-  type 'tag create_args :=
-    ?reasoning:Reasoning.t
+  module Non_streaming : sig
+    type nonrec t = [ `Non_streaming ] t
+  end
+
+  module Streaming : sig
+    type nonrec t = [ `Streaming ] t
+  end
+
+  type 'tag create :=
+    ?cache_control:Cache_control.t
+    -> ?reasoning:Reasoning.t
     -> ?tools:Tool.t list
     -> ?tool_choice:Tool_choice.t
     -> ?parallel_tool_calls:bool
     -> ?plugins:Plugin.t list
+    -> ?metadata:Metadata.t
+    -> ?user:string
+    -> ?session_id:string
+    -> ?route:string
+    -> ?trace:Trace.t
     -> ?temperature:float
     -> ?top_p:float
     -> ?top_k:int
@@ -569,7 +684,7 @@ module Request : sig
     -> ?response_format:Response_format.t
     -> ?structured_outputs:bool
     -> ?modalities:string list
-    -> ?stream_options:Stream_options.t
+    -> ?image_config:Image_config.t
     -> ?service_tier:string
     -> ?models:string list
     -> ?transforms:string list
@@ -579,11 +694,13 @@ module Request : sig
     -> unit
     -> 'tag t
 
-  (** Build a non-streaming request — the body for [Completions.create]. *)
-  val create : [ `Non_streaming ] create_args
+  val create : [ `Non_streaming ] create
 
-  (** Build a streaming request — the body for [Completions.create_stream]. *)
-  val create_streaming : [ `Streaming ] create_args
+  val create_streaming
+    :  ?debug:Debug.t
+    -> ?audio:Audio.t
+    -> ?stream_options:Stream_options.t
+    -> [ `Streaming ] create
 end
 
 module Logprobs : sig
@@ -593,7 +710,7 @@ module Logprobs : sig
       ; logprob : float
       ; bytes : int list option
       }
-    [@@deriving sexp_of]
+    [@@deriving sexp]
   end
 
   module Token : sig
@@ -603,14 +720,14 @@ module Logprobs : sig
       ; bytes : int list option
       ; top_logprobs : Top_logprob.t list
       }
-    [@@deriving sexp_of]
+    [@@deriving sexp]
   end
 
   type t =
     { content : Token.t list option
     ; refusal : Token.t list option
     }
-  [@@deriving sexp_of]
+  [@@deriving sexp]
 end
 
 module Response : sig
@@ -622,7 +739,7 @@ module Response : sig
         ; audio_tokens : int option
         ; video_tokens : int option
         }
-      [@@deriving sexp_of]
+      [@@deriving sexp]
     end
 
     module Cost_details : sig
@@ -631,7 +748,7 @@ module Response : sig
         ; upstream_inference_prompt_cost : float option
         ; upstream_inference_completions_cost : float option
         }
-      [@@deriving sexp_of]
+      [@@deriving sexp]
     end
 
     module Completion_tokens_details : sig
@@ -640,11 +757,11 @@ module Response : sig
         ; image_tokens : int option
         ; audio_tokens : int option
         }
-      [@@deriving sexp_of]
+      [@@deriving sexp]
     end
 
     module Server_tool_use : sig
-      type t = { web_search_requests : int option } [@@deriving sexp_of]
+      type t = { web_search_requests : int option } [@@deriving sexp]
     end
 
     type t =
@@ -658,7 +775,7 @@ module Response : sig
       ; completion_tokens_details : Completion_tokens_details.t option
       ; server_tool_use : Server_tool_use.t option
       }
-    [@@deriving sexp_of, fields ~getters]
+    [@@deriving sexp, fields ~getters]
   end
 
   module Choice : sig
@@ -669,10 +786,10 @@ module Response : sig
       ; index : int
       ; message : Message.t
       }
-    [@@deriving sexp_of]
+    [@@deriving sexp]
 
     module Elide_image : sig
-      type nonrec t = t [@@deriving sexp_of]
+      type nonrec t = t [@@deriving sexp]
     end
   end
 
@@ -687,10 +804,10 @@ module Response : sig
     ; service_tier : string option
     ; usage : Usage.t
     }
-  [@@deriving sexp_of]
+  [@@deriving sexp]
 
   module Elide_image : sig
-    type nonrec t = t [@@deriving sexp_of]
+    type nonrec t = t [@@deriving sexp]
   end
 end
 
@@ -701,7 +818,7 @@ module Stream_chunk : sig
         { name : string option
         ; arguments : string option
         }
-      [@@deriving sexp_of]
+      [@@deriving sexp]
     end
 
     type t =
@@ -710,13 +827,14 @@ module Stream_chunk : sig
       ; type_ : string option
       ; function_ : Function_call.t option
       }
-    [@@deriving sexp_of]
+    [@@deriving sexp]
   end
 
   module Delta : sig
     type t =
       { role : string option
       ; content : string option
+      ; audio : Audio_output.t option
       ; refusal : string option
       ; reasoning : string option
       ; reasoning_details : Reasoning_detail.t list
@@ -724,10 +842,10 @@ module Stream_chunk : sig
       ; annotations : Jsonaf.t list
       ; tool_calls : Tool_call_chunk.t list
       }
-    [@@deriving sexp_of]
+    [@@deriving sexp]
 
     module Elide_image : sig
-      type nonrec t = t [@@deriving sexp_of]
+      type nonrec t = t [@@deriving sexp]
     end
   end
 
@@ -742,7 +860,7 @@ module Stream_chunk : sig
         (** Populated when the upstream provider fails after generation has
             begun. Schema is provider-specific so we keep it as raw JSON. *)
       }
-    [@@deriving sexp_of]
+    [@@deriving sexp]
 
     val is_error : t -> bool
   end
@@ -756,9 +874,13 @@ module Stream_chunk : sig
     ; choices : Choice.t list
     ; system_fingerprint : string option
     ; service_tier : string option
+    ; debug : Jsonaf.t option
+      (** Populated on debug stream chunks when request debug options such as
+          [echo_upstream_body] are enabled. Kept as raw JSON because the shape is
+          diagnostic and may evolve independently from normal completion data. *)
     ; usage : Response.Usage.t option
     }
-  [@@deriving sexp_of]
+  [@@deriving sexp]
 end
 
 val create

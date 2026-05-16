@@ -1,7 +1,7 @@
 open! Core
 
 module Make_string_variant (T : sig
-    type t [@@deriving sexp_of, enumerate]
+    type t [@@deriving sexp, enumerate]
   end) =
 struct
   module T = struct
