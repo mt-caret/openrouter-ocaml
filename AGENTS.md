@@ -1,22 +1,25 @@
 # Working notes for agents
 
-`PROJECT.md` covers status and remaining work; this file covers conventions
-and gotchas that aren't visible from the code alone. Read both before making
-substantive changes. The user's global `~/.claude/CLAUDE.md` enforces broader
-OCaml/Jane-Street style rules — those still apply, this file only adds
-project-specific guidance.
+This file covers conventions and gotchas that aren't visible from the code
+alone. For current status, inspect the worktree, recent commits, and test
+suite rather than relying on a separate project-status file. These notes are
+project-specific and should be applied alongside any broader agent instructions
+configured by the person running the agent.
 
 ## Build / test workflow
 
-- `dune build`, `dune runtest`, `dune fmt` from the project root after every
-  substantive edit. None should warn or fail before reporting work done.
+- `dune build`, `dune runtest`, and `dune fmt` from the project root after
+  every substantive edit. None should warn or fail before reporting work done.
+  If you use `dune fmt --auto-promote`, inspect the diff before keeping
+  promoted changes.
 - Expect-test snapshots live in `lib/completions.ml` (3 inline tests for
   validation/parsing-helper logic) and `test/test_*_*.ml` (snapshot
   fixtures). Use `dune runtest --auto-promote` to update snapshots, but
   inspect the diff first — `--auto-promote` is the right tool but blindly
   accepting backtraces or unrelated changes is a foot-gun.
 - Tests stay clean even on the slowest machine; nothing currently does
-  network or wall-clock work inside `runtest`.
+  network or wall-clock work inside `runtest`. `dune runtest` also checks the
+  README examples through mdx.
 
 ## Live testing
 
@@ -33,6 +36,11 @@ project-specific guidance.
   smoke test after any parser-side change. If the script isn't lying around
   in `/tmp`, recreate it with the model list in the docstring at the top of
   `test/fixture_helpers.ml`.
+- For request-shape additions, exercise the example binary with
+  `-log-request-to /tmp/...` and inspect the JSON it actually sends. Prefer
+  omitting unset optional list/object fields rather than serializing empty
+  lists or objects; OpenRouter rejects some empty values that look harmless,
+  such as `modalities: []` and empty provider routing objects.
 - Don't commit API keys. If you write a script that uses one, write it to
   `/tmp/` rather than the repo.
 
@@ -82,6 +90,54 @@ project-specific guidance.
 
 ## Code patterns specific to this project
 
+### Request-surface changes
+
+Every new OpenRouter request feature should be wired through the full surface:
+library types/smart constructors, example CLI flags, request-serialization
+expect tests, and a manual example-binary invocation. Use `-log-request-to
+/tmp/...` to confirm the outgoing JSON. Add response fixtures only when the
+live response has a novel JSON shape; don't add fixtures that only differ by
+model id.
+
+Don't translate meaningful explicit values back to `None` just because they
+match a default — if a caller supplied a value, serializing it is usually the
+least surprising behavior. Empty optional lists/objects are different: omit
+them when unset, because OpenRouter rejects some empty values that appear
+innocuous.
+
+### API invariants belong in types
+
+Make invalid states unconstructable when the OpenRouter API has mode-specific
+rules. Use phantom tags, private records, variants, and smart constructors
+rather than documenting "don't set these fields together" in prose. In
+particular, streaming-only and non-streaming-only options should be separated
+in the type shape instead of sharing one permissive record.
+
+Expose record definitions in `.mli` files only when callers need to construct
+or pattern-match them directly. If a record has field-population contracts,
+prefer `type t = private { ... }` plus `create`.
+
+### Ppx-derived surfaces
+
+Use ppx derivations in both `.ml` and `.mli` whenever they express the public
+surface. In particular, keep `[@@deriving sexp]` exposed for public request and
+response types unless there is a deliberate reason to hide parsing or
+serialization. Before manually writing a converter signature that used to be
+derived, check the relevant ppx docs; `ppx_jsonaf_conv` supports narrower
+derivations such as `jsonaf_of` and `of_jsonaf`.
+
+### Example CLI structure
+
+Keep parsing and request construction close to `Command.Param.t` values instead
+of collecting raw strings and doing a second parsing pass later. Custom helper
+types/values for the example binary should live under `example/`, and if a
+custom type earns a module, name the primary type `t`.
+
+Keep request construction separate from execution concerns such as app headers,
+logging paths, and fixture capture. Values related to a type should live in
+that type's module; avoid accumulating top-level helpers that only make sense
+for one module's `t`.
+
 ### Forward-compatible response parsing
 
 Every record that's parsed from an API response carries
@@ -113,13 +169,16 @@ Don't try to call `Request.jsonaf_of_t` directly without a converter.
 
 ### Reusable JSON shape helpers
 
-- `String_variant.Make (T)` — for nullary variants whose JSON wire form is
-  a bare string. Recovers the constructor name via `[%sexp_of: T.t]` and
-  normalises with `lowercase + tr '_' '-' + rstrip '-'`. Use it for any new
+- `Json_helper.Make_string_variant (T)` — for nullary variants whose JSON wire
+  form is a bare string. Recovers the constructor name via `[%sexp_of: T.t]`
+  and normalises with `lowercase + tr '_' '-' + rstrip '-'`. Use it for any new
   enum-shaped variant. The `module T = struct ... end include T include
-  String_variant.Make (T)` pattern is the canonical shape.
-- `Tagged_union.{to,of}_jsonaf` — for `{type: …, …}` discriminated unions.
-  Centralises the dispatch + missing/non-string-tag error reporting.
+  Json_helper.Make_string_variant (T)` pattern is the canonical shape. The
+  functor also exposes `arg_type` for example CLI flags.
+- `Json_helper.Make_tagged_union` — for `{type: …, …}` discriminated unions.
+  Use `Json_helper.Tagged_union_codec` and `Json_helper.nested` to describe
+  whether each variant is tag-only, inlined, or nested under a payload key.
+  This centralises dispatch and missing/non-string-tag error reporting.
 
 ### `For_testing` submodules
 
@@ -164,9 +223,10 @@ surface and should not duplicate it in a second interface file.
 - **"Just add it as a quick helper in the example"** — if the logic
   belongs to a type, it lives in that type's module. The user has flagged
   this twice (Provider.is_empty, Reasoning.create).
-- **"Mock the network"** — live tests are the project's primary
-  confidence signal for parser correctness. Don't try to replace them with
-  hand-written JSON unless the user asks for it.
+- **"Mock the network"** — deterministic fixture tests stay in `runtest`, but
+  live calls are still the confidence signal for request/response surface
+  changes. Capture realistic fixtures from live responses when the JSON shape
+  is novel.
 - **"Fixtures should cover every model"** — they shouldn't. Each fixture
   must exercise a distinct JSON shape. Adding `another_openai_model.json`
   that's structurally identical to an existing fixture is anti-coverage.
@@ -175,8 +235,10 @@ surface and should not duplicate it in a second interface file.
 
 - `lib/completions.mli` — the public surface. Skim this end-to-end before
   making any cross-cutting change.
-- `lib/string_variant.{ml,mli}` and `lib/tagged_union.{ml,mli}` — the two
-  reusable abstractions; understand them before introducing a third.
+- `lib/json_helper.{ml,mli}` — reusable JSON codecs for string variants and
+  tagged unions; understand them before introducing another codec abstraction.
+- `example/chat_options.{ml,mli}` — the example CLI's request construction
+  surface. Read these before adding or changing completion flags.
 - `test/fixture_helpers.ml` — the fixture workflow doc-comment is the
   canonical "how to add a regression test" guide. Fixture tests are split by
   shape across `test/test_*_fixtures.ml`.
