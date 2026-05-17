@@ -17,12 +17,16 @@ jobs:
       - name: Set up OxCaml
         uses: ocaml/setup-ocaml@v3
         with:
-          ocaml-compiler: ocaml-variants.5.2.0+ox
+          # The latest 5.2.0+ox compiler currently resolves to
+          # oxcaml-compiler.5.2.0minus31, where jsonaf.v0.18~preview.130.91+190
+          # fails to compile. The older compiler/package slice keeps this CI job
+          # useful until the upstream jsonaf portability issue is fixed.
+          ocaml-compiler: "ocaml-variants.5.2.0+ox,oxcaml-compiler.5.2.0minus25"
           opam-repositories: |
             ox: git+https://github.com/oxcaml/opam-repository.git
             default: git+https://github.com/ocaml/opam-repository.git
 
-      - run: opam install . --deps-only
+      - run: opam install . --deps-only 'jsonaf=v0.18~preview.130.83+317'
 
       - run: opam exec -- dune build --pkg=disabled @install
 
