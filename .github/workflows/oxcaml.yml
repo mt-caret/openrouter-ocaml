@@ -1,0 +1,32 @@
+name: build & run tests (OxCaml)
+
+on:
+  - push
+  - pull_request
+
+permissions: read-all
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout tree
+        uses: actions/checkout@v6
+
+      - name: Set up OxCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ocaml-variants.5.2.0+ox
+          opam-repositories: |
+            ox: git+https://github.com/oxcaml/opam-repository.git
+            default: git+https://github.com/ocaml/opam-repository.git
+
+      - run: opam install . --deps-only
+
+      - run: opam exec -- dune build --pkg=disabled @install
+
+      # mdx does not currently solve under the OxCaml switch used above, so
+      # exercise the library and fixture/expect tests without the README mdx
+      # alias.
+      - run: opam exec -- dune runtest --pkg=disabled lib test
