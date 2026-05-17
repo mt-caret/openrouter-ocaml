@@ -24,7 +24,7 @@
   "An Async-based OCaml client for OpenRouter (https://openrouter.ai), a unified API for LLMs from multiple providers (Anthropic, OpenAI, Google, and others). Covers chat completions (with streaming, tools, plugins, multimodal content, provider routing, reasoning, and structured outputs), text embeddings, model listing, and generation stats.")
  (depends
   (ocaml
-   (>= 5.1.0))
+   (>= 5.2.0))
   (mdx
    (and
     :with-test
