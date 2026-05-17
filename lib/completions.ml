@@ -1536,6 +1536,15 @@ let lines_of_chunks (chunks : string Pipe.Reader.t) : string Pipe.Reader.t =
           | line -> Pipe.write writer line)))
 ;;
 
+(* ppx_log's global-extension spelling differs between the locked v0.17 stack
+   and the OxCaml stack, so use the runtime API for these debug-only stream
+   logs. *)
+let log_global_debug_s sexp =
+  match Log.Global.would_log (Some `Debug) with
+  | false -> ()
+  | true -> Log.Global.debug_s sexp
+;;
+
 let create_stream ~api_key ?app_info ?on_stream_chunk (request : [ `Streaming ] Request.t)
   =
   let headers = Http.make_headers ~api_key ?app_info () in
@@ -1580,10 +1589,11 @@ let create_stream ~api_key ?app_info ?on_stream_chunk (request : [ `Streaming ] 
              | Some ("data", content) -> `Data content
              | None | Some (_, _) -> `Unknown line
            in
-           [%log.global.debug
-             "SSE line"
-               (parse_result
-                : [ `Comment of string | `Done | `Data of string | `Unknown of string ])];
+           log_global_debug_s
+             [%message
+               "SSE line"
+                 (parse_result
+                  : [ `Comment of string | `Done | `Data of string | `Unknown of string ])];
            match parse_result with
            | `Comment _ | `Done | `Unknown _ -> Deferred.unit
            | `Data data ->
@@ -1613,7 +1623,8 @@ let create_stream ~api_key ?app_info ?on_stream_chunk (request : [ `Streaming ] 
                               (response : Cohttp.Response.t)
                               (json : Jsonaf.t)])
                in
-               [%log.global.debug "Stream chunk" (stream_chunk : Stream_chunk.t)];
+               log_global_debug_s
+                 [%message "Stream chunk" (stream_chunk : Stream_chunk.t)];
                stream_chunk
              in
              Pipe.write writer result)))

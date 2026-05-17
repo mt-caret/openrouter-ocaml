@@ -1,0 +1,36 @@
+name: build & run tests (OxCaml)
+
+on:
+  - push
+  - pull_request
+
+permissions: read-all
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout tree
+        uses: actions/checkout@v6
+
+      - name: Set up OxCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          # The latest 5.2.0+ox compiler currently resolves to
+          # oxcaml-compiler.5.2.0minus31, where jsonaf.v0.18~preview.130.91+190
+          # fails to compile. The older compiler/package slice keeps this CI job
+          # useful until the upstream jsonaf portability issue is fixed.
+          ocaml-compiler: "ocaml-variants.5.2.0+ox,oxcaml-compiler.5.2.0minus25"
+          opam-repositories: |
+            ox: git+https://github.com/oxcaml/opam-repository.git
+            default: git+https://github.com/ocaml/opam-repository.git
+
+      - run: opam install . --deps-only 'jsonaf=v0.18~preview.130.83+317'
+
+      - run: opam exec -- dune build --pkg=disabled @install
+
+      # mdx does not currently solve under the OxCaml switch used above, so
+      # exercise the library and fixture/expect tests without the README mdx
+      # alias.
+      - run: opam exec -- dune runtest --pkg=disabled lib test
