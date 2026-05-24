@@ -23,23 +23,46 @@
  (description
   "An Async-based OCaml client for OpenRouter (https://openrouter.ai), a unified API for LLMs from multiple providers (Anthropic, OpenAI, Google, and others). Covers chat completions (with streaming, tools, plugins, multimodal content, provider routing, reasoning, and structured outputs), text embeddings, model listing, and generation stats.")
  (depends
+  ; Pinned to Jane Street's v0.18~preview packages (see dune-workspace) because
+  ; [@@jsonaf.allow_extra_fields.log] only exists from ppx_jsonaf_conv v0.18
+  ; onward. Those packages currently require OCaml < 5.3.
   (ocaml
-   (>= 5.2.0))
+   (and
+    (>= 5.2.0)
+    (< 5.3)))
   (mdx
    (and
     :with-test
     (>= 2.3.0)))
-  ppx_jsonaf_conv
-  ppx_jane
-  ppx_typed_fields
-  async
+  (ppx_jsonaf_conv
+   (and
+    (>= v0.18~)
+    (< v0.19)))
+  (ppx_jane
+   (and
+    (>= v0.18~)
+    (< v0.19)))
+  (ppx_typed_fields
+   (and
+    (>= v0.18~)
+    (< v0.19)))
+  (async
+   (and
+    (>= v0.18~)
+    (< v0.19)))
   cohttp-async
   (async_ssl
-   ; This has to be v0.17.0-1 rather than v0.17.0 to work around some
-   ; compilation issues.
-   (>= v0.17.0-1))
-  core
-  jsonaf)
+   (and
+    (>= v0.18~)
+    (< v0.19)))
+  (core
+   (and
+    (>= v0.18~)
+    (< v0.19)))
+  (jsonaf
+   (and
+    (>= v0.18~)
+    (< v0.19))))
  (tags
   (openrouter llm ai api-client async)))
 

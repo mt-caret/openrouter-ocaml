@@ -1,0 +1,15 @@
+(version v0.18~preview.130.91+190)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml base ppx_here ppx_sexp_conv dune ppxlib)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/ppx_sexp_message/archive/9f0b4e63e9b87b417d96a7634df8c2d6d8a12893.tar.gz)
+  (checksum
+   sha256=5c82bdfd11c064daa96d4770083c7970c5c19354ef257e8cc7d4a91f0721221d)))

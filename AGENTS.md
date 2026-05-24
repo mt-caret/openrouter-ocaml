@@ -18,8 +18,13 @@ configured by the person running the agent.
   inspect the diff first — `--auto-promote` is the right tool but blindly
   accepting backtraces or unrelated changes is a foot-gun.
 - Tests stay clean even on the slowest machine; nothing currently does
-  network or wall-clock work inside `runtest`. `dune runtest` also checks the
-  README examples through mdx.
+  network or wall-clock work inside `runtest`.
+- The README mdx check (root `dune`) is disabled by default: it links a
+  bytecode runtime, and the Jane Street v0.18~preview packages reference an
+  OxCaml-only runtime symbol (`caml_no_bytecode_impl`) that mainline OCaml's
+  bytecode runtime lacks, so it can't link there (native builds are fine). Run
+  it with `OPENROUTER_MDX_README=true dune runtest` on a toolchain whose
+  bytecode runtime provides the symbol.
 
 ## Live testing
 
@@ -141,9 +146,19 @@ for one module's `t`.
 ### Forward-compatible response parsing
 
 Every record that's parsed from an API response carries
-`[@@jsonaf.allow_extra_fields]`. New fields appearing in OpenRouter's
-responses don't break parsing. When adding a new response record, do the
-same.
+`[@@jsonaf.allow_extra_fields.log]`. New fields appearing in OpenRouter's
+responses don't break parsing; instead the field is logged at `Error` level
+(`<module>.t_of_jsonaf: extra fields: <name>`) via `ppx_log`, so unmodeled
+fields are observable rather than silently dropped. This needs
+`Async_log_kernel.Ppx_log_syntax` in scope, which `open! Async` provides — so
+any module defining a response record must `open! Async` even if it otherwise
+wouldn't. When adding a new response record, do the same.
+
+In fixture tests these log lines surface in the expect snapshots:
+`Fixture_helpers` pins the global log's time source to the epoch (stable
+timestamp), captures the lines, and `flush_log` drains them — deduped — after
+the parsed value is printed. Call `flush_log` at the end of any test that
+parses a fixture outside the `parse_*` helpers.
 
 ### `[@jsonaf.option]` vs `[@default None]`
 

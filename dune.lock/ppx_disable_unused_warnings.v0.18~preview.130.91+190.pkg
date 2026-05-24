@@ -1,0 +1,15 @@
+(version v0.18~preview.130.91+190)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml dune ppxlib)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/ppx_disable_unused_warnings/archive/ffe89301853e92ed169b2e9961af123007b0539d.tar.gz)
+  (checksum
+   sha256=f2074c305f924f797f3df7fe69eba5d4c0d82ba9d871d029d818e9e01244cf39)))

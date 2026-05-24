@@ -43,7 +43,7 @@ module Response = struct
       ; index : int
       ; embedding : float list
       }
-    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
   end
 
   module Usage = struct
@@ -53,7 +53,7 @@ module Response = struct
         ; upstream_inference_prompt_cost : float option [@default None]
         ; upstream_inference_completions_cost : float option [@default None]
         }
-      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
     end
 
     type t =
@@ -63,7 +63,7 @@ module Response = struct
       ; is_byok : bool option [@default None]
       ; cost_details : Cost_details.t option [@default None]
       }
-    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
   end
 
   type t =
@@ -74,7 +74,7 @@ module Response = struct
     ; provider : string option [@default None]
     ; id : string option [@default None]
     }
-  [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+  [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
 end
 
 let create ~api_key ?app_info ?on_response_body (request : Request.t) =

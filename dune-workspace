@@ -1,2 +1,16 @@
 (lang dune 3.22)
+
 (pkg enabled)
+
+; Pinned to a Jane Street opam-repository revision that provides the
+; v0.18~preview.130.91+190 package slice. The later 130.100+614 introduced a
+; regression that crashes inline expect tests located in a subdirectory. Drop
+; the pin once that is fixed.
+(repository
+ (name janestreet)
+ (url
+  "git+https://github.com/janestreet/opam-repository.git#64e4c78f3642220210f28bd49a078fd3c76c79d8"))
+
+(lock_dir
+ (path dune.lock)
+ (repositories janestreet overlay upstream))

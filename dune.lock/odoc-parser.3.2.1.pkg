@@ -1,0 +1,18 @@
+(version 3.2.1)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (when %{pkg-self:dev} (run dune subst))
+     (run dune build -p %{pkg-self:name} -j %{jobs} @install))))))
+
+(depends
+ (all_platforms
+  (dune ocaml astring camlp-streams)))
+
+(source
+ (fetch
+  (url https://github.com/ocaml/odoc/releases/download/3.2.1/odoc-3.2.1.tbz)
+  (checksum
+   sha256=d45eb125514839fd9ac27702bb4938d1b4f3b6978e9b16ab9673ea067245affc)))

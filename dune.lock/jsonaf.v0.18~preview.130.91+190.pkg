@@ -1,0 +1,15 @@
+(version v0.18~preview.130.91+190)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml base basement ppx_jane angstrom bigstringaf dune faraday)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/jsonaf/archive/7da1d2cc092dc51cd8b369e43db47e3bdb212082.tar.gz)
+  (checksum
+   sha256=fc28ad82773a432c720805c83942e9e21deb53639d1b5f952fea69cc854a8079)))

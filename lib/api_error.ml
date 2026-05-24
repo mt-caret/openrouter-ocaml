@@ -1,4 +1,5 @@
 open! Core
+open! Async
 open Jsonaf.Export
 
 module Code = struct
@@ -28,7 +29,7 @@ module Details = struct
     ; code : Code.t option [@default None]
     ; metadata : Jsonaf.t option [@default None]
     }
-  [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+  [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
 end
 
 (* [user_id] is the OpenRouter account the request authenticated as, echoed
@@ -38,7 +39,7 @@ type t =
   { error : Details.t
   ; user_id : string option [@default None]
   }
-[@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+[@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
 
 let of_json_or_body ~body_string json =
   match Or_error.try_with (fun () -> [%of_jsonaf: t] json) with

@@ -1,0 +1,15 @@
+(version v0.18~preview.130.91+190)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml basement capsule0 ppx_js_style ppx_sexp_conv sexplib0 unique dune)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/parsexp/archive/f1c6e375952f12a85264b36e0bd82bf0d0f5e991.tar.gz)
+  (checksum
+   sha256=46d476790e735dc7fd63582a718eb36a6a721f06388e6d16499e6ac36bc0f154)))

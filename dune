@@ -1,4 +1,13 @@
+; The README quickstart is checked by mdx, which links a bytecode custom
+; runtime. The Jane Street v0.18~preview packages reference an OxCaml-only
+; runtime symbol (caml_no_bytecode_impl) that mainline OCaml's bytecode runtime
+; does not provide, so this fails to link there (native builds are unaffected).
+; Disabled by default; set OPENROUTER_MDX_README=true to run it on a toolchain
+; whose bytecode runtime provides the symbol.
+
 (mdx
  (files README.md)
  (libraries async async_kernel core openrouter_api)
- (package openrouter_api))
+ (package openrouter_api)
+ (enabled_if
+  (= %{env:OPENROUTER_MDX_README=false} true)))

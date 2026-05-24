@@ -2,6 +2,39 @@ open! Core
 open! Async
 open Openrouter_api
 
+(* Response records carry [@@jsonaf.allow_extra_fields.log], so parsing a fixture
+   whose body has a field we don't model emits an [Error]-level log line naming
+   it. Pin the global log's time source to the epoch so the lines get a stable
+   timestamp, and capture them into a buffer that [flush_log] drains into the
+   expect snapshot after the parsed value is printed.
+
+   [flush_log] collapses identical lines: a /models response repeats the same
+   "extra fields" warning once per entry (300+ times), which says nothing more
+   than the single line does. Distinct warnings are kept, sorted for stability. *)
+let captured_log_lines : string Queue.t = Queue.create ()
+
+let () =
+  Synchronous_time_source.create ~now:Time_ns.epoch ()
+  |> Synchronous_time_source.read_only
+  |> Log.Global.set_time_source;
+  Log.Global.set_output
+    [ Log.Output.create
+        ~flush:(fun () -> return ())
+        (fun msgs ->
+           Queue.iter msgs ~f:(fun msg ->
+             Queue.enqueue captured_log_lines (Log.Message.to_write_only_text msg));
+           return ())
+    ]
+;;
+
+let flush_log () =
+  let%map () = Log.Global.flushed () in
+  Queue.to_list captured_log_lines
+  |> List.dedup_and_sort ~compare:String.compare
+  |> List.iter ~f:print_endline;
+  Queue.clear captured_log_lines
+;;
+
 (* Each fixture lives in [responses/<name>.{json,ndjson}] and exercises a real
    captured response body. The expected sexp is snapshot-tested so that any
    future refactor that breaks parsing fails loudly here.
@@ -22,7 +55,7 @@ open Openrouter_api
 let parse_fixture ~of_jsonaf ~sexp_of name ~ext =
   let%bind body = Reader.file_contents [%string "responses/%{name}.%{ext}"] in
   body |> Jsonaf.parse |> Or_error.ok_exn |> of_jsonaf |> sexp_of |> print_s;
-  Deferred.unit
+  flush_log ()
 ;;
 
 let parse_response_fixture =
@@ -51,7 +84,7 @@ let stream_fixture_chunks name =
 let parse_stream_fixture name =
   let%bind chunks = stream_fixture_chunks name in
   print_s [%sexp (chunks : Completions.Stream_chunk.t list)];
-  Deferred.unit
+  flush_log ()
 ;;
 
 module Audio_stream_summary = struct

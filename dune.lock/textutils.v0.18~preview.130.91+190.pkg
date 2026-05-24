@@ -1,0 +1,15 @@
+(version v0.18~preview.130.91+190)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml core core_kernel core_unix ppx_jane dune uutf)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/textutils/archive/1d986744c9343aca5d5dc96812937ed13f8b1e4d.tar.gz)
+  (checksum
+   sha256=68f32cc16063748153dcc06008e89dcc312e86f412a1f6ad6d8f4df8dbbc4aaf)))

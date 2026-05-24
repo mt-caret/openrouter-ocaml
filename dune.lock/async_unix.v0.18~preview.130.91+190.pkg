@@ -1,0 +1,24 @@
+(version v0.18~preview.130.91+190)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml
+   async_kernel
+   core
+   core_kernel
+   core_unix
+   ppx_jane
+   ppx_optcomp
+   sexplib
+   cstruct
+   dune)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/async_unix/archive/1a0fcf3ab757248f6ad10ccbc3b70425770b1997.tar.gz)
+  (checksum
+   sha256=240cda22a134bfd48e84032b4c8133035aa3c42107abeb0909e5e2181177cc9c)))

@@ -1,0 +1,15 @@
+(version v0.18~preview.130.91+190)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml base ppx_template ppxlib_jane dune ppxlib)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/ppx_stable/archive/63fe34fb57b7b0fe5d10b964aa5319606c26aa53.tar.gz)
+  (checksum
+   sha256=409b2a27a2fd80f1306695da3b73056f7794fe6430aed71d5b3c980b867432ff)))

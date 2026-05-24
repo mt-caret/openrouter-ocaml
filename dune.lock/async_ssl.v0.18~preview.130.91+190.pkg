@@ -1,0 +1,27 @@
+(version v0.18~preview.130.91+190)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml
+   async
+   base
+   core
+   ppx_jane
+   ppx_optcomp
+   stdio
+   conf-libssl
+   ctypes
+   ctypes-foreign
+   dune
+   dune-configurator
+   integers)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/async_ssl/archive/ea550e3005332e66a426b3459494b6cf8cd92ae2.tar.gz)
+  (checksum
+   sha256=53c92eb72b26716cedd70b6a9217c7f1271dfa30894ff2d3d0b696fbdb50e533)))

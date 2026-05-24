@@ -1,6 +1,7 @@
 open! Core
 open! Async
 open Openrouter_api
+open Fixture_helpers
 
 (* /models is large (hundreds of entries × deeply-nested per-model records),
    so instead of snapshotting every model we verify the full body parses
@@ -23,6 +24,7 @@ let%expect_test "models_list" =
           (List.find_exn response.data ~f:(fun model ->
              String.equal model.id "x-ai/grok-4.5")
            : Models.Model_info.t)];
+  let%bind () = flush_log () in
   [%expect
     {|
     ((count 344) (total_count (344)) (links (((next ()))))
