@@ -23,7 +23,7 @@ module Reasoning_detail = struct
     ; data : string option [@default None] [@jsonaf_drop_default.equal]
       (* Google's encrypted reasoning *)
     }
-  [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+  [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
 end
 
 (* Image in a message response. [index] is absent on Gemini's image-output
@@ -31,7 +31,7 @@ end
 module Image = struct
   module Image_url = struct
     type t = { url : string }
-    [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+    [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
   end
 
   type t =
@@ -39,7 +39,7 @@ module Image = struct
     ; image_url : Image_url.t
     ; index : int option [@default None] [@jsonaf_drop_default.equal]
     }
-  [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+  [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
 
   module Elide_data = struct
     type nonrec t = t =
@@ -58,7 +58,7 @@ module Audio_output = struct
     ; expires_at : int option [@default None]
     ; transcript : string option [@default None]
     }
-  [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+  [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
 end
 
 (* Tool calling types per OpenRouter API spec:
@@ -307,7 +307,7 @@ module Tool_call = struct
       { name : string
       ; arguments : string (* JSON-encoded string *)
       }
-    [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+    [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
   end
 
   type t =
@@ -315,7 +315,7 @@ module Tool_call = struct
     ; type_ : string [@key "type"]
     ; function_ : Function_call.t [@key "function"]
     }
-  [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+  [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
 end
 
 module Plugin = struct
@@ -420,7 +420,7 @@ module Citation = struct
     ; start_index : int option [@jsonaf.option]
     ; end_index : int option [@jsonaf.option]
     }
-  [@@deriving equal, of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+  [@@deriving equal, of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
 
   let of_annotation_jsonaf json =
     match Jsonaf.member "type" json with
@@ -449,7 +449,7 @@ module Message = struct
     ; tool_call_id : string option [@default None] [@jsonaf_drop_default.equal]
       (* For tool role messages: ID of the tool call being responded to *)
     }
-  [@@deriving jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+  [@@deriving jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
 
   module Elide_image = struct
     type nonrec t = t =
@@ -1260,7 +1260,7 @@ module Logprobs = struct
       ; logprob : float
       ; bytes : int list option [@default None]
       }
-    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
   end
 
   module Token = struct
@@ -1270,14 +1270,14 @@ module Logprobs = struct
       ; bytes : int list option [@default None]
       ; top_logprobs : Top_logprob.t list [@default []]
       }
-    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
   end
 
   type t =
     { content : Token.t list option [@default None]
     ; refusal : Token.t list option [@default None]
     }
-  [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+  [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
 end
 
 module Response = struct
@@ -1289,7 +1289,7 @@ module Response = struct
         ; audio_tokens : int option [@default None]
         ; video_tokens : int option [@default None]
         }
-      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
     end
 
     module Cost_details = struct
@@ -1298,7 +1298,7 @@ module Response = struct
         ; upstream_inference_prompt_cost : float option [@default None]
         ; upstream_inference_completions_cost : float option [@default None]
         }
-      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
     end
 
     module Completion_tokens_details = struct
@@ -1307,12 +1307,12 @@ module Response = struct
         ; image_tokens : int option [@default None]
         ; audio_tokens : int option [@default None]
         }
-      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
     end
 
     module Server_tool_use = struct
       type t = { web_search_requests : int option [@default None] }
-      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
     end
 
     type t =
@@ -1326,7 +1326,7 @@ module Response = struct
       ; completion_tokens_details : Completion_tokens_details.t option [@default None]
       ; server_tool_use : Server_tool_use.t option [@default None]
       }
-    [@@deriving of_jsonaf, sexp, fields ~getters] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp, fields ~getters] [@@jsonaf.allow_extra_fields.log]
   end
 
   module Choice = struct
@@ -1337,7 +1337,7 @@ module Response = struct
       ; index : int
       ; message : Message.t
       }
-    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
 
     module Elide_image = struct
       type nonrec t = t =
@@ -1362,7 +1362,7 @@ module Response = struct
     ; service_tier : string option [@default None]
     ; usage : Usage.t
     }
-  [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+  [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
 
   module Elide_image = struct
     type nonrec t = t =
@@ -1387,7 +1387,7 @@ module Stream_chunk = struct
         { name : string option [@default None] [@jsonaf_drop_default.equal]
         ; arguments : string option [@default None] [@jsonaf_drop_default.equal]
         }
-      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
     end
 
     type t =
@@ -1397,7 +1397,7 @@ module Stream_chunk = struct
       ; function_ : Function_call.t option
             [@default None] [@jsonaf_drop_default.equal] [@key "function"]
       }
-    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
   end
 
   module Delta = struct
@@ -1417,7 +1417,7 @@ module Stream_chunk = struct
             [@default []] [@jsonaf_drop_default.equal]
       ; tool_calls : Tool_call_chunk.t list [@default []] [@jsonaf_drop_default.equal]
       }
-    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
 
     module Elide_image = struct
       type nonrec t = t =
@@ -1448,7 +1448,7 @@ module Stream_chunk = struct
            object. We keep this as raw JSON since OpenRouter doesn't document
            a stable schema for it. *)
       }
-    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
 
     (** [true] when this chunk represents a mid-stream upstream failure (i.e.
         [finish_reason = "error"]). *)
@@ -1467,7 +1467,7 @@ module Stream_chunk = struct
     ; debug : Jsonaf.t option [@default None] [@sexp_drop_if Option.is_none]
     ; usage : Response.Usage.t option [@jsonaf.option]
     }
-  [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+  [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
 end
 
 let create ~api_key ?app_info ?on_response_body (request : [ `Non_streaming ] Request.t) =

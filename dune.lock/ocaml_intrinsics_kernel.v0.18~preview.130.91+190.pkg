@@ -1,0 +1,15 @@
+(version v0.18~preview.130.91+190)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml dune)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/ocaml_intrinsics_kernel/archive/bc4b7c396712a5a463670d7767f81650b5e783b4.tar.gz)
+  (checksum
+   sha256=6a0872c34bbee4351c93d6c257806f3dd6ab6e1ccf0fead4bb3e780127687ff1)))

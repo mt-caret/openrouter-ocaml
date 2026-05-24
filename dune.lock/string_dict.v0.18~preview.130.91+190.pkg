@@ -1,0 +1,15 @@
+(version v0.18~preview.130.91+190)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml base basement ppx_compare ppx_hash dune)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/string_dict/archive/446c6408ae22aa3c0ec69c6c0ca35b07d6270ed5.tar.gz)
+  (checksum
+   sha256=fb199298045fb787153b27af251d8bbe6f94fb14e5941f5bc15151a54e4ed0f2)))

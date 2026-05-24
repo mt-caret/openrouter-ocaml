@@ -1,0 +1,26 @@
+(version v0.18~preview.130.91+190)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml
+   base
+   ppx_compare
+   ppx_custom_printf
+   ppx_fields_conv
+   ppx_globalize
+   ppx_optcomp
+   ppx_sexp_conv
+   ppx_stable_witness
+   ppx_template
+   ppx_variants_conv
+   dune)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/bin_prot/archive/1f3b86dedd3031439c183e0d4687e54ef2b8ab2b.tar.gz)
+  (checksum
+   sha256=c3ae54ebc47e1d63c3bc1d3118aeef06b845597ea278e59ae92f58c35fbba983)))

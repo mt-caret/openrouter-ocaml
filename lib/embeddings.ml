@@ -43,7 +43,7 @@ module Response = struct
       ; index : int
       ; embedding : float list
       }
-    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
   end
 
   module Usage = struct
@@ -52,7 +52,7 @@ module Response = struct
       ; total_tokens : int
       ; cost : float option [@default None]
       }
-    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+    [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
   end
 
   type t =
@@ -63,7 +63,7 @@ module Response = struct
     ; provider : string option [@default None]
     ; id : string option [@default None]
     }
-  [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+  [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields.log]
 end
 
 let create ~api_key ?app_info ?on_response_body (request : Request.t) =

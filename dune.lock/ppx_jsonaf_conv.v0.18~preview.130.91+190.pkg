@@ -1,0 +1,24 @@
+(version v0.18~preview.130.91+190)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml
+   base
+   basement
+   capitalization
+   jsonaf
+   ppx_jane
+   ppx_template
+   ppxlib_jane
+   dune
+   ppxlib)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/ppx_jsonaf_conv/archive/982613b4244d4e12c3c81cc1fbf14b0adbd81c03.tar.gz)
+  (checksum
+   sha256=fe4f70780c8e0569d30488d5d6a43b04930265ec243aa80b0f1211f7b8ae9d24)))

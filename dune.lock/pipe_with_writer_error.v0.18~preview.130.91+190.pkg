@@ -1,0 +1,15 @@
+(version v0.18~preview.130.91+190)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml async_kernel core ppx_jane dune)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/pipe_with_writer_error/archive/05431a026a0e225828f93142b3ed7bfedb1f0902.tar.gz)
+  (checksum
+   sha256=1ff1eac5cce8fae9d675b53a68442d20e0cfcd1c82c9f5f2e12b9534f73f96b3)))

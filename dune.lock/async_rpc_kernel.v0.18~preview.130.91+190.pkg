@@ -1,0 +1,26 @@
+(version v0.18~preview.130.91+190)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml
+   async_kernel
+   bin_prot
+   core
+   core_extended
+   core_kernel
+   flexible_sexp
+   pipe_with_writer_error
+   ppx_jane
+   protocol_version_header
+   sexplib
+   dune)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/async_rpc_kernel/archive/58231cd4c224dc37568e562c0c6c3ad2169fccfb.tar.gz)
+  (checksum
+   sha256=f1703cdc8c42c5c32e07e1e85a1903ebaf86c74a6914ba1484327df228c5b4d3)))

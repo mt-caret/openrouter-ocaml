@@ -1,6 +1,7 @@
 open! Core
 open! Async
 open Openrouter_api
+open Fixture_helpers
 
 (* /models is large (hundreds of entries × deeply-nested per-model records),
    so instead of snapshotting every model we verify the full body parses
@@ -16,6 +17,7 @@ let%expect_test "models_list" =
       ""
         ~count:(List.length response.data : int)
         ~first:(List.hd_exn response.data : Models.Model_info.t)];
+  let%bind () = flush_log () in
   [%expect
     {|
     ((count 367)
@@ -48,6 +50,7 @@ let%expect_test "models_list" =
        (knowledge_cutoff ()) (expiration_date ())
        (links
         (((details (/api/v1/models/inclusionai/ring-2.6-1t-20260508/endpoints))))))))
+    1970-01-01 00:00:00.000000Z Error "lib/models.ml.Model_info.t_of_jsonaf: extra fields: supported_voices"
     |}];
   Deferred.unit
 ;;

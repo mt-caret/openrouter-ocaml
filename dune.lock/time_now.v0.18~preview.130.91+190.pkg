@@ -1,0 +1,15 @@
+(version v0.18~preview.130.91+190)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml base jane-street-headers jst-config ppx_base ppx_optcomp dune)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/time_now/archive/7750569200e667ab72e965adddb31ef5357d8358.tar.gz)
+  (checksum
+   sha256=c3b6f8a2d009f4007f06b8329a373dd8457e01a00c737eb888158cb0456f7665)))

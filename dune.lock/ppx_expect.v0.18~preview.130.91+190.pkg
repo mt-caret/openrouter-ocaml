@@ -1,0 +1,25 @@
+(version v0.18~preview.130.91+190)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml
+   base
+   basement
+   capsule
+   portable
+   ppx_fuelproof
+   ppx_here
+   ppx_inline_test
+   stdio
+   dune
+   ppxlib)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/ppx_expect/archive/db6e7dd81980c3160ad45b403d97990f99ed5621.tar.gz)
+  (checksum
+   sha256=4a0359935651d310c5f110a7de3e6f2f641c29b96de87ab76f51af69c50de4e9)))

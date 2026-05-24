@@ -1,0 +1,30 @@
+(version v0.18~preview.130.91+190)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml
+   base
+   ppx_base
+   ppx_fields_conv
+   ppx_helpers
+   ppx_let
+   ppx_portable
+   ppx_sexp_message
+   ppx_sexp_value
+   ppx_shorthand
+   ppx_template
+   ppxlib_jane
+   splittable_random
+   dune
+   ocaml-compiler-libs
+   ppxlib)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/base_quickcheck/archive/e20523db3ee7df53525d13dd44707fda857c69bd.tar.gz)
+  (checksum
+   sha256=48b7879a8089d27cd587f4ba41bff04542862908eb6c6a2713e61578c4660f58)))

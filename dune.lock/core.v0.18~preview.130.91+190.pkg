@@ -1,0 +1,46 @@
+(version v0.18~preview.130.91+190)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml
+   base
+   base_bigstring
+   base_quickcheck
+   bin_prot
+   capsule
+   fieldslib
+   jane-street-headers
+   jst-config
+   parsexp
+   portable
+   ppx_assert
+   ppx_base
+   ppx_diff
+   ppx_expect
+   ppx_hash
+   ppx_inline_test
+   ppx_jane
+   ppx_optcomp
+   ppx_sexp_conv
+   ppx_sexp_message
+   ppx_stable_witness
+   sexplib
+   splittable_random
+   stdio
+   string_dict
+   time_now
+   typerep
+   univ_map
+   uopt
+   variantslib
+   dune)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/core/archive/3998718a19af8b148bc1864c24ca37198e6d3820.tar.gz)
+  (checksum
+   sha256=f7b4d5e827ab8db495f205f1de8733d78daace5195539bbbf8ac3af8c41c3339)))

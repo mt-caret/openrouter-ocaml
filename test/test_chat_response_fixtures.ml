@@ -148,6 +148,7 @@ let%expect_test "openai_gpt5_mini_reasoning" =
        (completion_tokens_details
         (((reasoning_tokens (0)) (image_tokens (0)) (audio_tokens (0)))))
        (server_tool_use ()))))
+    1970-01-01 00:00:00.000000Z Error "lib/completions.ml.Reasoning_detail.t_of_jsonaf: extra fields: id"
     |}];
   Deferred.unit
 ;;

@@ -1,0 +1,23 @@
+(version v0.18~preview.130.91+190)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml
+   base
+   bin_prot
+   ppx_helpers
+   ppx_here
+   ppxlib_jane
+   dune
+   ocaml-compiler-libs
+   ppxlib)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/ppx_bin_prot/archive/b499ebb914e282c011fb1bd46f85a97906eb6314.tar.gz)
+  (checksum
+   sha256=b54f251e03f038d23d583acbf195e81b2bf08c80846023e724e3050795b7e1d8)))

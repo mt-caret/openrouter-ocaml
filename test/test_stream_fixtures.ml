@@ -414,6 +414,7 @@ let%expect_test "stream_debug_echo_upstream_body" =
 let%expect_test "stream_audio_output" =
   let%bind chunks = stream_fixture_chunks "stream_audio_output" in
   print_s [%sexp (audio_stream_summary chunks : Audio_stream_summary.t)];
+  let%bind () = flush_log () in
   [%expect
     {|
     ((chunks 9) (audio_chunks 7)

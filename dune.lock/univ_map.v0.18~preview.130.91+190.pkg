@@ -1,0 +1,22 @@
+(version v0.18~preview.130.91+190)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml
+   base
+   ppx_base
+   ppx_here
+   ppx_inline_test
+   ppx_sexp_message
+   ppx_sexp_value
+   dune)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/univ_map/archive/ca585cdc06842fe09f11743eca42237add1cf1df.tar.gz)
+  (checksum
+   sha256=e13536f3ac1dcaf795c3d8fd5ecf15426b07e51b33d6d6baa5e93ad9f05cc287)))

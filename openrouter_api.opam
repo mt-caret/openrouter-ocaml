@@ -12,16 +12,16 @@ doc: "https://mt-caret.github.io/openrouter-ocaml/"
 bug-reports: "https://github.com/mt-caret/openrouter-ocaml/issues"
 depends: [
   "dune" {>= "3.22"}
-  "ocaml" {>= "5.2.0"}
+  "ocaml" {>= "5.2.0" & < "5.3"}
   "mdx" {with-test & >= "2.3.0"}
-  "ppx_jsonaf_conv"
-  "ppx_jane"
-  "ppx_typed_fields"
-  "async"
+  "ppx_jsonaf_conv" {>= "v0.18~" & < "v0.19"}
+  "ppx_jane" {>= "v0.18~" & < "v0.19"}
+  "ppx_typed_fields" {>= "v0.18~" & < "v0.19"}
+  "async" {>= "v0.18~" & < "v0.19"}
   "cohttp-async"
-  "async_ssl" {>= "v0.17.0-1"}
-  "core"
-  "jsonaf"
+  "async_ssl" {>= "v0.18~" & < "v0.19"}
+  "core" {>= "v0.18~" & < "v0.19"}
+  "jsonaf" {>= "v0.18~" & < "v0.19"}
   "odoc" {with-doc}
 ]
 build: [
