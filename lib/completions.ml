@@ -1292,6 +1292,14 @@ module Response = struct
       [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
     end
 
+    module Cache_creation = struct
+      type t =
+        { ephemeral_5m_input_tokens : int option [@default None]
+        ; ephemeral_1h_input_tokens : int option [@default None]
+        }
+      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+    end
+
     module Cost_details = struct
       type t =
         { upstream_inference_cost : float option [@default None]
@@ -1322,6 +1330,7 @@ module Response = struct
       ; cost : float option [@default None]
       ; is_byok : bool option [@default None]
       ; prompt_tokens_details : Prompt_tokens_details.t option [@default None]
+      ; cache_creation : Cache_creation.t option [@default None]
       ; cost_details : Cost_details.t option [@default None]
       ; completion_tokens_details : Completion_tokens_details.t option [@default None]
       ; server_tool_use : Server_tool_use.t option [@default None]

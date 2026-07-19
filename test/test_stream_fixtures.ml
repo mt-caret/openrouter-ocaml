@@ -57,6 +57,7 @@ let%expect_test "stream_anthropic_haiku" =
          (prompt_tokens_details
           (((cached_tokens (0)) (cache_write_tokens (0)) (audio_tokens (0))
             (video_tokens (0)))))
+         (cache_creation ())
          (cost_details
           (((upstream_inference_cost (3.8E-05))
             (upstream_inference_prompt_cost (1.3E-05))
@@ -230,6 +231,7 @@ let%expect_test "stream_anthropic_reasoning" =
          (prompt_tokens_details
           (((cached_tokens (0)) (cache_write_tokens (0)) (audio_tokens (0))
             (video_tokens (0)))))
+         (cache_creation ())
          (cost_details
           (((upstream_inference_cost (0.000241))
             (upstream_inference_prompt_cost (4.1E-05))
@@ -305,10 +307,70 @@ let%expect_test "stream_openai_with_usage" =
          (prompt_tokens_details
           (((cached_tokens (0)) (cache_write_tokens (0)) (audio_tokens (0))
             (video_tokens (0)))))
+         (cache_creation ())
          (cost_details
           (((upstream_inference_cost (4.05E-06))
             (upstream_inference_prompt_cost (1.65E-06))
             (upstream_inference_completions_cost (2.4E-06)))))
+         (completion_tokens_details
+          (((reasoning_tokens (0)) (image_tokens (0)) (audio_tokens (0)))))
+         (server_tool_use ()))))))
+    |}];
+  Deferred.unit
+;;
+
+(* Streaming with a [cache_control] breakpoint in the prompt: the final usage
+   chunk reports the cache write both as
+   [prompt_tokens_details.cache_write_tokens] and broken down by TTL in
+   [cache_creation]. *)
+let%expect_test "stream_cache_write" =
+  let%bind () = parse_stream_fixture "stream_cache_write" in
+  [%expect
+    {|
+    (((id gen-1784432434-AbxwtH7tu453ABv9aFni) (provider Anthropic)
+      (model anthropic/claude-sonnet-4.6) (object_ chat.completion.chunk)
+      (created 1784432434)
+      (choices
+       (((logprobs ()) (finish_reason ()) (native_finish_reason ()) (index 0)
+         (delta
+          ((role (assistant)) (content (ok)) (refusal ()) (reasoning ())
+           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
+      (system_fingerprint ()) (service_tier ()) (usage ()))
+     ((id gen-1784432434-AbxwtH7tu453ABv9aFni) (provider Anthropic)
+      (model anthropic/claude-sonnet-4.6) (object_ chat.completion.chunk)
+      (created 1784432434)
+      (choices
+       (((logprobs ()) (finish_reason (stop)) (native_finish_reason (end_turn))
+         (index 0)
+         (delta
+          ((role (assistant)) (content ("")) (refusal ()) (reasoning ())
+           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
+      (system_fingerprint ()) (service_tier ()) (usage ()))
+     ((id gen-1784432434-AbxwtH7tu453ABv9aFni) (provider Anthropic)
+      (model anthropic/claude-sonnet-4.6) (object_ chat.completion.chunk)
+      (created 1784432434)
+      (choices
+       (((logprobs ()) (finish_reason (stop)) (native_finish_reason (end_turn))
+         (index 0)
+         (delta
+          ((role (assistant)) (content ("")) (refusal ()) (reasoning ())
+           (reasoning_details ()) (images ()) (annotations ()) (tool_calls ())))
+         (error ()))))
+      (system_fingerprint ()) (service_tier (default))
+      (usage
+       (((prompt_tokens 2174) (completion_tokens 4) (total_tokens 2178)
+         (cost (0.008205)) (is_byok (false))
+         (prompt_tokens_details
+          (((cached_tokens (0)) (cache_write_tokens (2164)) (audio_tokens (0))
+            (video_tokens (0)))))
+         (cache_creation
+          (((ephemeral_5m_input_tokens (2164)) (ephemeral_1h_input_tokens (0)))))
+         (cost_details
+          (((upstream_inference_cost (0.008205))
+            (upstream_inference_prompt_cost (0.008145))
+            (upstream_inference_completions_cost (6E-05)))))
          (completion_tokens_details
           (((reasoning_tokens (0)) (image_tokens (0)) (audio_tokens (0)))))
          (server_tool_use ()))))))
@@ -398,6 +460,7 @@ let%expect_test "stream_debug_echo_upstream_body" =
          (prompt_tokens_details
           (((cached_tokens (0)) (cache_write_tokens (0)) (audio_tokens (0))
             (video_tokens (0)))))
+         (cache_creation ())
          (cost_details
           (((upstream_inference_cost (4.2E-06))
             (upstream_inference_prompt_cost (1.8E-06))

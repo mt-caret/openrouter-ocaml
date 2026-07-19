@@ -753,6 +753,17 @@ module Response : sig
       [@@deriving sexp]
     end
 
+    (** Breakdown of prompt-cache writes by ephemeral TTL, as reported by
+        providers with Anthropic-style prompt caching. The sum matches
+        [Prompt_tokens_details.cache_write_tokens]. *)
+    module Cache_creation : sig
+      type t =
+        { ephemeral_5m_input_tokens : int option
+        ; ephemeral_1h_input_tokens : int option
+        }
+      [@@deriving sexp]
+    end
+
     module Cost_details : sig
       type t =
         { upstream_inference_cost : float option
@@ -782,6 +793,7 @@ module Response : sig
       ; cost : float option
       ; is_byok : bool option
       ; prompt_tokens_details : Prompt_tokens_details.t option
+      ; cache_creation : Cache_creation.t option
       ; cost_details : Cost_details.t option
       ; completion_tokens_details : Completion_tokens_details.t option
       ; server_tool_use : Server_tool_use.t option

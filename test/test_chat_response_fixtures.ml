@@ -31,7 +31,8 @@ let%expect_test "bedrock_null_system_fingerprint" =
      (usage
       ((prompt_tokens 18961) (completion_tokens 37) (total_tokens 18998)
        (cost (0.057438)) (is_byok ()) (prompt_tokens_details ())
-       (cost_details ()) (completion_tokens_details ()) (server_tool_use ()))))
+       (cache_creation ()) (cost_details ()) (completion_tokens_details ())
+       (server_tool_use ()))))
     |}];
   Deferred.unit
 ;;
@@ -68,6 +69,7 @@ let%expect_test "openai_logprobs" =
        (prompt_tokens_details
         (((cached_tokens (0)) (cache_write_tokens (0)) (audio_tokens (0))
           (video_tokens (0)))))
+       (cache_creation ())
        (cost_details
         (((upstream_inference_cost (3.3E-06))
           (upstream_inference_prompt_cost (2.1E-06))
@@ -102,6 +104,7 @@ let%expect_test "cache_hit" =
        (prompt_tokens_details
         (((cached_tokens (5051)) (cache_write_tokens (0)) (audio_tokens (0))
           (video_tokens (0)))))
+       (cache_creation ())
        (cost_details
         (((upstream_inference_cost (0.0005331))
           (upstream_inference_prompt_cost (0.0005081))
@@ -141,6 +144,7 @@ let%expect_test "openai_gpt5_mini_reasoning" =
        (prompt_tokens_details
         (((cached_tokens (0)) (cache_write_tokens (0)) (audio_tokens (0))
           (video_tokens (0)))))
+       (cache_creation ())
        (cost_details
         (((upstream_inference_cost (5.25E-05))
           (upstream_inference_prompt_cost (2.5E-06))
@@ -212,6 +216,7 @@ let%expect_test "anthropic_haiku_reasoning" =
        (prompt_tokens_details
         (((cached_tokens (0)) (cache_write_tokens (0)) (audio_tokens (0))
           (video_tokens (0)))))
+       (cache_creation ())
        (cost_details
         (((upstream_inference_cost (0.000669))
           (upstream_inference_prompt_cost (4.4E-05))
@@ -288,6 +293,7 @@ let%expect_test "deepseek_r1" =
        (prompt_tokens_details
         (((cached_tokens (0)) (cache_write_tokens (0)) (audio_tokens (0))
           (video_tokens (0)))))
+       (cache_creation ())
        (cost_details
         (((upstream_inference_cost (0.003128895))
           (upstream_inference_prompt_cost (1.6335E-05))
@@ -972,6 +978,7 @@ let%expect_test "web_search" =
        (prompt_tokens_details
         (((cached_tokens (0)) (cache_write_tokens (0)) (audio_tokens (0))
           (video_tokens (0)))))
+       (cache_creation ())
        (cost_details
         (((upstream_inference_cost (0.001167))
           (upstream_inference_prompt_cost (0.0011652))
@@ -1012,6 +1019,7 @@ let%expect_test "image_output" =
        (prompt_tokens_details
         (((cached_tokens (0)) (cache_write_tokens (0)) (audio_tokens (0))
           (video_tokens (0)))))
+       (cache_creation ())
        (cost_details
         (((upstream_inference_cost (0.038714))
           (upstream_inference_prompt_cost (1.5E-06))
