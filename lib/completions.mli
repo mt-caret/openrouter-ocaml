@@ -9,8 +9,10 @@ module Reasoning_detail : sig
     ; index : int option
     ; type_ : string option
     ; text : string option
+    ; summary : string option
     ; signature : string option
     ; data : string option
+    ; id : string option
     }
   [@@deriving sexp]
 end

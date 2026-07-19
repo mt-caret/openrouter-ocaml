@@ -84,7 +84,7 @@ let%expect_test "stream_anthropic_reasoning" =
           ((role (assistant)) (content ("")) (refusal ()) (reasoning (This))
            (reasoning_details
             (((format (anthropic-claude-v1)) (index (0)) (type_ (reasoning.text))
-              (text (This)) (signature ()) (data ()))))
+              (text (This)) (summary ()) (signature ()) (data ()) (id ()))))
            (images ()) (annotations ()) (tool_calls ())))
          (error ()))))
       (system_fingerprint ()) (service_tier ()) (usage ()))
@@ -98,7 +98,8 @@ let%expect_test "stream_anthropic_reasoning" =
            (reasoning (" is a straight"))
            (reasoning_details
             (((format (anthropic-claude-v1)) (index (0)) (type_ (reasoning.text))
-              (text (" is a straight")) (signature ()) (data ()))))
+              (text (" is a straight")) (summary ()) (signature ()) (data ())
+              (id ()))))
            (images ()) (annotations ()) (tool_calls ())))
          (error ()))))
       (system_fingerprint ()) (service_tier ()) (usage ()))
@@ -112,7 +113,8 @@ let%expect_test "stream_anthropic_reasoning" =
            (reasoning ("forward arithmetic"))
            (reasoning_details
             (((format (anthropic-claude-v1)) (index (0)) (type_ (reasoning.text))
-              (text ("forward arithmetic")) (signature ()) (data ()))))
+              (text ("forward arithmetic")) (summary ()) (signature ()) (data ())
+              (id ()))))
            (images ()) (annotations ()) (tool_calls ())))
          (error ()))))
       (system_fingerprint ()) (service_tier ()) (usage ()))
@@ -126,7 +128,8 @@ let%expect_test "stream_anthropic_reasoning" =
            (reasoning (" question. "))
            (reasoning_details
             (((format (anthropic-claude-v1)) (index (0)) (type_ (reasoning.text))
-              (text (" question. ")) (signature ()) (data ()))))
+              (text (" question. ")) (summary ()) (signature ()) (data ())
+              (id ()))))
            (images ()) (annotations ()) (tool_calls ())))
          (error ()))))
       (system_fingerprint ()) (service_tier ()) (usage ()))
@@ -140,7 +143,7 @@ let%expect_test "stream_anthropic_reasoning" =
            (reasoning ("1 + 1 = "))
            (reasoning_details
             (((format (anthropic-claude-v1)) (index (0)) (type_ (reasoning.text))
-              (text ("1 + 1 = ")) (signature ()) (data ()))))
+              (text ("1 + 1 = ")) (summary ()) (signature ()) (data ()) (id ()))))
            (images ()) (annotations ()) (tool_calls ())))
          (error ()))))
       (system_fingerprint ()) (service_tier ()) (usage ()))
@@ -153,7 +156,7 @@ let%expect_test "stream_anthropic_reasoning" =
           ((role (assistant)) (content ("")) (refusal ()) (reasoning (2.))
            (reasoning_details
             (((format (anthropic-claude-v1)) (index (0)) (type_ (reasoning.text))
-              (text (2.)) (signature ()) (data ()))))
+              (text (2.)) (summary ()) (signature ()) (data ()) (id ()))))
            (images ()) (annotations ()) (tool_calls ())))
          (error ()))))
       (system_fingerprint ()) (service_tier ()) (usage ()))
@@ -166,10 +169,10 @@ let%expect_test "stream_anthropic_reasoning" =
           ((role (assistant)) (content ("")) (refusal ()) (reasoning ())
            (reasoning_details
             (((format (anthropic-claude-v1)) (index (0)) (type_ (reasoning.text))
-              (text ())
+              (text ()) (summary ())
               (signature
                (EuMBCkgIDRABGAIqQBT3laJVTnu82MA+qIoM21rKNO7RavUnTB8hV2/jzC/qf/IkHKF+8sYptWVcO7SS3YeNr9R+77/331vMeJ5rnBUSDHmfEcEFvZ4NxlnXrRoMgUMHJQDVQQPGHZqmIjAxL0vdSycvENe6OtAw/BdZwR5+QTHW/cxWItq13SFnf0nu5n+AmDHv6mNx4sYGVsIqSQebHeU9PkpUtmYKYWtcCQZUXoJ7844EVTiVgGzy7G6LB/2a7mvcF/7ivM3oAcVFI9vhF2mFAB2IvVRFFvuoeOFJobt1TAfFZJkYAQ==))
-              (data ()))))
+              (data ()) (id ()))))
            (images ()) (annotations ()) (tool_calls ())))
          (error ()))))
       (system_fingerprint ()) (service_tier ()) (usage ()))

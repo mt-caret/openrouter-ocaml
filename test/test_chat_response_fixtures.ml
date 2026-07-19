@@ -61,9 +61,10 @@ let%expect_test "tool_call_with_index" =
            (((format (anthropic-claude-v1)) (index (0)) (type_ (reasoning.text))
              (text
               ("The user wants to know the weather in Paris. I'll call the get_weather function."))
+             (summary ())
              (signature
               (Er4CCosBCA8YAipADp9BKldVZJO/39Y2zysbe+DJ+yO4EChEzC+o5C6CnU07giNnti2w+SQYxvxURNj6bU3h3Sqjed0T/3z+6KYGsDIRY2xhdWRlLXNvbm5ldC00LTY4AEIIdGhpbmtpbmdaJDRjMGYwNDZmLTI1ZmQtNDVmYi1iZmIzLWEwOGE4ZTI0OWNhNxIMJomEF47tDKZh6AMmGgxzvFjIlVMTZ8+8IfQiMCezHMY3Wi+PuOcmPdjroaub0Nx7HCNHSOsJrcbnpinBCshgjwKduQ4ZS82Z1KtWYSpgNyqJP9W7JJmjriZomCeDfP4tpakTQqExVulqvBSv0Ec8eZN7g008wb4tCcZ+Zpc/ZhIpE1UnYUShVSHLEmA6lgasFAkHy/dbufbNSn5PgBqDYvyG28wf5ZHxaNkbBsCEGAE=))
-             (data ()))))
+             (data ()) (id ()))))
           (images ()) (annotations ())
           (tool_calls
            (((id toolu_01HQCyhYEUrTQuxR1Q8fnCQ9) (type_ function) (index (0))
@@ -186,9 +187,10 @@ let%expect_test "openai_gpt5_mini_reasoning" =
          ((role assistant) (content ("1 + 1 = 2")) (refusal ()) (reasoning ())
           (reasoning_details
            (((format (openai-responses-v1)) (index (0))
-             (type_ (reasoning.encrypted)) (text ()) (signature ())
+             (type_ (reasoning.encrypted)) (text ()) (summary ()) (signature ())
              (data
-              (gAAAAABqAEYeCqRFfityy7cfJA6FhAHCpXvg5esml-wiuX4bzdtF5yAirFR1XNxPxDw0rsDM-oedBgca8bbpeAIPd_U6UBnHQDxeGcB4mEwC4TNE57IxmlaU0LGhALC-q2j84UtGHVp4yro7qZR9Fwgb_nlvk0FOlTIZdVL1BRHXywfqy6990LuTfarKfzti7TWRyTavkbhsyKFnX9WNpLTANYdW28Yn0U2g4KFk2Xa36SJSGvlLOxL-Y1kQnzr9DZolNkOwZYEXBwggO68Iy36ICuJ0waVbYQNJGcOntcIBtiTCRil6o8ED0uQMxT30cF1af8FZgxHDAjK-4Jr1Th6UhQXbSvzrR1im9vUIp3L8AewfOKayt47NaRNYEddeoC06cYZivuaht-xZACXukFFzW1tvDA2Q-vVrXzojepiNXQMoBkWaqGmBhzqfXDnZ7U92gXq0FhHRni38EZHszLZvcChJiolRdcYGRKN5kyHPUJoBvzVZSPCKzGdmusqsqfcPK6rY4PkbtcG78Ga7ZTKl-MhmMZdpHPGBs7amxHoqPV52j6ffPre-sRAHw6TPdZvy-GkG_S540zUajqIfT9ile4WDTayP63CHsjyLGSMfXLeAKG7IeuFhTLiel-3igZLw2uA6N1BSXwvUhQLFUEzzUvWI15Q66UxJzuVZfCbpADT4PelLwSeW9Vl0w9M2ROf50nqTzRXRNfT1gJAs1UevqWgVMhRDAEK4wvV_9YXApFEMJpxhbwMst8Y9OqpZMH-DtRy0HIfFj0Mbie5gzbFMMvkgGQgyJ6pPhAEVMv0bQkrEDvXj0czx965UMiox7SSE_5aqPM7wSYlcvP9as7G-1o18SO3-zBDsvddZti1pNnk7h9BjmZVaA8iN-DAioCS1W12CTSy7-ZZwTJkq38muzgMMaQn_jhAbhJa4OG7n8gpv8MldSg8jPNIvwtZK-PELWT_h59mwMT3vgPttD_b-5yQB86DF_w==)))))
+              (gAAAAABqAEYeCqRFfityy7cfJA6FhAHCpXvg5esml-wiuX4bzdtF5yAirFR1XNxPxDw0rsDM-oedBgca8bbpeAIPd_U6UBnHQDxeGcB4mEwC4TNE57IxmlaU0LGhALC-q2j84UtGHVp4yro7qZR9Fwgb_nlvk0FOlTIZdVL1BRHXywfqy6990LuTfarKfzti7TWRyTavkbhsyKFnX9WNpLTANYdW28Yn0U2g4KFk2Xa36SJSGvlLOxL-Y1kQnzr9DZolNkOwZYEXBwggO68Iy36ICuJ0waVbYQNJGcOntcIBtiTCRil6o8ED0uQMxT30cF1af8FZgxHDAjK-4Jr1Th6UhQXbSvzrR1im9vUIp3L8AewfOKayt47NaRNYEddeoC06cYZivuaht-xZACXukFFzW1tvDA2Q-vVrXzojepiNXQMoBkWaqGmBhzqfXDnZ7U92gXq0FhHRni38EZHszLZvcChJiolRdcYGRKN5kyHPUJoBvzVZSPCKzGdmusqsqfcPK6rY4PkbtcG78Ga7ZTKl-MhmMZdpHPGBs7amxHoqPV52j6ffPre-sRAHw6TPdZvy-GkG_S540zUajqIfT9ile4WDTayP63CHsjyLGSMfXLeAKG7IeuFhTLiel-3igZLw2uA6N1BSXwvUhQLFUEzzUvWI15Q66UxJzuVZfCbpADT4PelLwSeW9Vl0w9M2ROf50nqTzRXRNfT1gJAs1UevqWgVMhRDAEK4wvV_9YXApFEMJpxhbwMst8Y9OqpZMH-DtRy0HIfFj0Mbie5gzbFMMvkgGQgyJ6pPhAEVMv0bQkrEDvXj0czx965UMiox7SSE_5aqPM7wSYlcvP9as7G-1o18SO3-zBDsvddZti1pNnk7h9BjmZVaA8iN-DAioCS1W12CTSy7-ZZwTJkq38muzgMMaQn_jhAbhJa4OG7n8gpv8MldSg8jPNIvwtZK-PELWT_h59mwMT3vgPttD_b-5yQB86DF_w==))
+             (id (rs_0a71a8690855ad7b016a00461e50e88197b9ac43f701f1f8ef)))))
           (images ()) (annotations ()) (tool_calls ()) (tool_call_id ()))))))
      (system_fingerprint ()) (service_tier (default))
      (usage
@@ -204,6 +206,60 @@ let%expect_test "openai_gpt5_mini_reasoning" =
           (upstream_inference_completions_cost (5E-05)))))
        (completion_tokens_details
         (((reasoning_tokens (0)) (image_tokens (0)) (audio_tokens (0)))))
+       (server_tool_use ()))))
+    |}];
+  Deferred.unit
+;;
+
+(* Reasoning summaries: a [reasoning.summary] entry carries the human-readable
+   text in [summary] (not [text]), and the paired [reasoning.encrypted] entry
+   carries an upstream item [id] alongside [data]. Distinct from
+   [openai_gpt5_mini_reasoning], which has the encrypted block only. *)
+let%expect_test "openai_reasoning_summary" =
+  let%bind () = parse_response_fixture "openai_reasoning_summary" in
+  [%expect {|
+    ((id gen-1784461577-6yn11kYhEza7r83EExjT) (provider OpenAI)
+     (model openai/gpt-5.6-terra) (object_ chat.completion) (created 1784461577)
+     (choices
+      (((logprobs ()) (finish_reason stop) (native_finish_reason completed)
+        (index 0)
+        (message
+         ((role assistant)
+          (content
+           ("17 \195\151 23 = 17 \195\151 (20 + 3) = 340 + 51 = **391**"))
+          (refusal ())
+          (reasoning
+           ( "**Calculating the product**\
+            \n\
+            \nI need to provide an answer that shows my calculation clearly. So, multiplying 17 by 23 gives me 391. I should break down the steps concisely to make it clear. It\226\128\153s important to think this through and present it in a way that\226\128\153s easy for anyone to follow. Alright, let\226\128\153s ensure everything adds up and make sure the final result is accurate!"))
+          (reasoning_details
+           (((format (openai-responses-v1)) (index (0))
+             (type_ (reasoning.summary)) (text ())
+             (summary
+              ( "**Calculating the product**\
+               \n\
+               \nI need to provide an answer that shows my calculation clearly. So, multiplying 17 by 23 gives me 391. I should break down the steps concisely to make it clear. It\226\128\153s important to think this through and present it in a way that\226\128\153s easy for anyone to follow. Alright, let\226\128\153s ensure everything adds up and make sure the final result is accurate!"))
+             (signature ()) (data ()) (id ()))
+            ((format (openai-responses-v1)) (index (1))
+             (type_ (reasoning.encrypted)) (text ()) (summary ()) (signature ())
+             (data
+              (gAAAAABqXLkM5pBs2Xy3tA8u0w5h9H_evJzYWJAAGuJ4-_oRiMQ26HITOIG9nMgAKrhrxt5DVkINpHQlgvF5g8OOt7suZrmI7TUClrhjq53vxhIaD7YT_rE8CATrtAMseRdEiiERJjXpEo90g6WxKKOHAAuZVptB2lOZGQkKN4Xy4reraSm36x5lx-UXjDkLY6H1wOK79bhqPjTeOl16xreAF3m2wSz3QSFbhku8j69nS0HORZr8TgnPmLigQUuAtuDyHu5Q-3A_snwalEqbSTPOMUSu9OMYaCnD6ch3Jx1ep-Vw-D1533mh4CYVgFIoYWowXbUjGxEY3NruKQOlH_MHnBjKaa8gHKmUO3aW3Bt-Obq-PPSl_WDkkBOvHpzFhKLRQWHtfljwUHwrf8Nvg7FGF_mItQK0ZWTJZxSKEzBkteyocbmLnonBE48ehSK3QWXR-6uTRV-_5LGnuLrJY7GTpZo4auih2DWZp7nuAzQYK8HpoOg_EPWrnlE3pWaaIKDcqSEmBq5fh2nPo-FtV84IiOned9dmjyyDcpGsG5sxUKZUcvinYAQPwA8Pb0qe33rDyfrob3kGZDCfOQNRkbMKLTkkCEfYYa1teClPPCSFmhzDW8k2QR0jNRPKuKCcPK3JYxFvzq9V8op1LEnXK81_lNb3ArzoBP8EtFYEtDLRWVcUkcKWtTvYeewsBU71eSNp_HyL-qucT7BmeMq_om1cJ6ZdNGT6AiDWjg-i5EkkrnDV5uk2kagCnepBEG0jTw2-N_g7AfDsxCbP6W_qJplitoJKJZsmEG2XHObLKURZG2MSNxUNnShD9q1d7QTfuq6OznWyFEBvM0vY89X09xq6BJL3QSXyU51wldGrbgIlWrswVMFm5_q9MWRfltPYstKVYcvgsbn33-nxRz_sl62l2Du_Rkb67K8XbT_DeXsRT5yXqIQ0zuRkbdbXz3Mmz_a7bSOcpcrX1RR10YVKGBNfJPjhQF-bOVPT6dF9e6dQ41Gwuiu5YyAS2zuZ_HBcooU6mSMWvEby3578wbU-ZxhTQslBRlsBwYsUzNuCBIiJ1klHJoZ9qKs=))
+             (id (rs_067e26ca77bfa064016a5cb909c45c8197a466a5833686a2d9)))))
+          (images ()) (annotations ()) (tool_calls ()) (tool_call_id ()))))))
+     (system_fingerprint ()) (service_tier (default))
+     (usage
+      ((prompt_tokens 16) (completion_tokens 58) (total_tokens 74)
+       (cost (0.00091)) (is_byok (false))
+       (prompt_tokens_details
+        (((cached_tokens (0)) (cache_write_tokens (0)) (audio_tokens (0))
+          (video_tokens (0)))))
+       (cache_creation ())
+       (cost_details
+        (((upstream_inference_cost (0.00091))
+          (upstream_inference_prompt_cost (4E-05))
+          (upstream_inference_completions_cost (0.00087)))))
+       (completion_tokens_details
+        (((reasoning_tokens (28)) (image_tokens (0)) (audio_tokens (0)))))
        (server_tool_use ()))))
     |}];
   Deferred.unit
@@ -258,9 +314,10 @@ let%expect_test "anthropic_haiku_reasoning" =
                \n- Get 2\
                \n\
                \nLet me present this concisely."))
+             (summary ())
              (signature
               (EoIDCkgIDRABGAIqQNJ68Ljc66/k6FlS0Ams/FZeke4eeQ2Tx28quZanENJXCYcCuYyNP7E0VPjpm8b5fOhOICt+dmYouGFKCZ2ZjPQSDFjoVMgjDW+HIT5m1RoMbZl4Zx/hvww6bwERIjDnqLUqGgZDhDCQf15MoI50GNnstQeyNNtI7hhEU8J6SYmEN5P6Crt8b77bnwFfQj4q5wH5i7oGbbexEO2NNtd44n+adtujt6t2nLAeTZuNknj/Hv/uIGd690u+wrXsz1XOT02sdH/1n6XwvQWIUQbbmpOwOcX33vELsI/+CiAHVg3o1n76z8DqSWa3o+hGBTNnU/7yqzJQJpZgvXq/zwgE4LSxU+qNSJJgHLWogvgPO5z7uLpcE0NLYtMYRS7z2RBdn9CZwfqnZ+nOYbKFu5bJNrnioLsA9gavFmaNDFJ2xz/pT4Nev9RVYn1JZJSk8rs8Di5t5rCQJpcG66qGPGdgOIiEOB5vSCrwwmEGZ22u3CXwhJBYhXYJ8fAYAQ==))
-             (data ()))))
+             (data ()) (id ()))))
           (images ()) (annotations ()) (tool_calls ()) (tool_call_id ()))))))
      (system_fingerprint ()) (service_tier ())
      (usage
@@ -337,7 +394,7 @@ let%expect_test "deepseek_r1" =
                \n\
                \nAlright, I think that's solid. The answer is 4.\
                \n"))
-             (signature ()) (data ()))))
+             (summary ()) (signature ()) (data ()) (id ()))))
           (images ()) (annotations ()) (tool_calls ()) (tool_call_id ()))))))
      (system_fingerprint ()) (service_tier ())
      (usage

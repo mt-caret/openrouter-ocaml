@@ -1,0 +1,15 @@
+
+         
+
+         
+
+         
+
+         
+
+         
+
+         
+
+         
+{"id":"gen-1784461577-6yn11kYhEza7r83EExjT","object":"chat.completion","created":1784461577,"model":"openai/gpt-5.6-terra","provider":"OpenAI","system_fingerprint":null,"service_tier":"default","choices":[{"index":0,"logprobs":null,"finish_reason":"stop","native_finish_reason":"completed","message":{"role":"assistant","content":"17 × 23 = 17 × (20 + 3) = 340 + 51 = **391**","refusal":null,"reasoning":"**Calculating the product**\n\nI need to provide an answer that shows my calculation clearly. So, multiplying 17 by 23 gives me 391. I should break down the steps concisely to make it clear. It’s important to think this through and present it in a way that’s easy for anyone to follow. Alright, let’s ensure everything adds up and make sure the final result is accurate!","reasoning_details":[{"type":"reasoning.summary","summary":"**Calculating the product**\n\nI need to provide an answer that shows my calculation clearly. So, multiplying 17 by 23 gives me 391. I should break down the steps concisely to make it clear. It’s important to think this through and present it in a way that’s easy for anyone to follow. Alright, let’s ensure everything adds up and make sure the final result is accurate!","format":"openai-responses-v1","index":0},{"type":"reasoning.encrypted","data":"gAAAAABqXLkM5pBs2Xy3tA8u0w5h9H_evJzYWJAAGuJ4-_oRiMQ26HITOIG9nMgAKrhrxt5DVkINpHQlgvF5g8OOt7suZrmI7TUClrhjq53vxhIaD7YT_rE8CATrtAMseRdEiiERJjXpEo90g6WxKKOHAAuZVptB2lOZGQkKN4Xy4reraSm36x5lx-UXjDkLY6H1wOK79bhqPjTeOl16xreAF3m2wSz3QSFbhku8j69nS0HORZr8TgnPmLigQUuAtuDyHu5Q-3A_snwalEqbSTPOMUSu9OMYaCnD6ch3Jx1ep-Vw-D1533mh4CYVgFIoYWowXbUjGxEY3NruKQOlH_MHnBjKaa8gHKmUO3aW3Bt-Obq-PPSl_WDkkBOvHpzFhKLRQWHtfljwUHwrf8Nvg7FGF_mItQK0ZWTJZxSKEzBkteyocbmLnonBE48ehSK3QWXR-6uTRV-_5LGnuLrJY7GTpZo4auih2DWZp7nuAzQYK8HpoOg_EPWrnlE3pWaaIKDcqSEmBq5fh2nPo-FtV84IiOned9dmjyyDcpGsG5sxUKZUcvinYAQPwA8Pb0qe33rDyfrob3kGZDCfOQNRkbMKLTkkCEfYYa1teClPPCSFmhzDW8k2QR0jNRPKuKCcPK3JYxFvzq9V8op1LEnXK81_lNb3ArzoBP8EtFYEtDLRWVcUkcKWtTvYeewsBU71eSNp_HyL-qucT7BmeMq_om1cJ6ZdNGT6AiDWjg-i5EkkrnDV5uk2kagCnepBEG0jTw2-N_g7AfDsxCbP6W_qJplitoJKJZsmEG2XHObLKURZG2MSNxUNnShD9q1d7QTfuq6OznWyFEBvM0vY89X09xq6BJL3QSXyU51wldGrbgIlWrswVMFm5_q9MWRfltPYstKVYcvgsbn33-nxRz_sl62l2Du_Rkb67K8XbT_DeXsRT5yXqIQ0zuRkbdbXz3Mmz_a7bSOcpcrX1RR10YVKGBNfJPjhQF-bOVPT6dF9e6dQ41Gwuiu5YyAS2zuZ_HBcooU6mSMWvEby3578wbU-ZxhTQslBRlsBwYsUzNuCBIiJ1klHJoZ9qKs=","format":"openai-responses-v1","id":"rs_067e26ca77bfa064016a5cb909c45c8197a466a5833686a2d9","index":1}]}}],"usage":{"prompt_tokens":16,"completion_tokens":58,"total_tokens":74,"cost":0.00091,"is_byok":false,"prompt_tokens_details":{"cached_tokens":0,"cache_write_tokens":0,"audio_tokens":0,"video_tokens":0},"cost_details":{"upstream_inference_cost":0.00091,"upstream_inference_prompt_cost":0.00004,"upstream_inference_completions_cost":0.00087},"completion_tokens_details":{"reasoning_tokens":28,"image_tokens":0,"audio_tokens":0}}}

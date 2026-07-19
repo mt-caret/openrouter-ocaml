@@ -19,9 +19,14 @@ module Reasoning_detail = struct
     ; index : int option [@default None] [@jsonaf_drop_default.equal]
     ; type_ : string option [@key "type"] [@default None] [@jsonaf_drop_default.equal]
     ; text : string option [@default None] [@jsonaf_drop_default.equal]
+    ; summary : string option [@default None] [@jsonaf_drop_default.equal]
+      (* [reasoning.summary] blocks carry the human-readable summary here rather
+         than in [text]; seen on OpenAI o-series and xAI Grok. *)
     ; signature : string option [@default None] [@jsonaf_drop_default.equal]
     ; data : string option [@default None] [@jsonaf_drop_default.equal]
       (* Google's encrypted reasoning *)
+    ; id : string option [@default None] [@jsonaf_drop_default.equal]
+      (* Upstream reasoning-item id accompanying [reasoning.encrypted] blocks. *)
     }
   [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 end
