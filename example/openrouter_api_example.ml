@@ -122,7 +122,7 @@ let list_models_command =
      and () = Log.Global.set_level_via_param () in
      fun () ->
        let%bind.Deferred.Or_error api_key = api_key_from_env () in
-       let%map.Deferred.Or_error { data = models } =
+       let%map.Deferred.Or_error { data = models; total_count = _; links = _ } =
          Models.list
            ~api_key
            ?on_response_body:
@@ -316,6 +316,7 @@ let generation_command =
              ~user_agent:(row str_opt)
              ~http_referer:(row str_opt)
              ~session_id:(row str_opt)
+             ~preset_id:(row str_opt)
              ~request_id:(row str_opt)
              ~upstream_id:(row str_opt)
              ~app_id:(row jsonaf_opt)
@@ -327,6 +328,7 @@ let generation_command =
              ~finish_reason:(row str_opt)
              ~native_finish_reason:(row str_opt)
              ~service_tier:(row str_opt)
+             ~data_region:(row str_opt)
              ~latency:(row int_opt)
              ~moderation_latency:(row int_opt)
              ~generation_time:(row int_opt)

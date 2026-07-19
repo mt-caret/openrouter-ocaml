@@ -313,6 +313,7 @@ module Tool_call = struct
   type t =
     { id : string
     ; type_ : string [@key "type"]
+    ; index : int option [@default None] [@jsonaf_drop_default.equal]
     ; function_ : Function_call.t [@key "function"]
     }
   [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields]

@@ -47,10 +47,21 @@ module Response = struct
   end
 
   module Usage = struct
+    module Cost_details = struct
+      type t =
+        { upstream_inference_cost : float option [@default None]
+        ; upstream_inference_prompt_cost : float option [@default None]
+        ; upstream_inference_completions_cost : float option [@default None]
+        }
+      [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+    end
+
     type t =
       { prompt_tokens : int
       ; total_tokens : int
       ; cost : float option [@default None]
+      ; is_byok : bool option [@default None]
+      ; cost_details : Cost_details.t option [@default None]
       }
     [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
   end

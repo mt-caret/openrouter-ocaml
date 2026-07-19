@@ -32,6 +32,7 @@ module Stats : sig
     ; user_agent : string option
     ; http_referer : string option
     ; session_id : string option
+    ; preset_id : string option
     ; request_id : string option
     ; upstream_id : string option
     ; app_id : Jsonaf.t option
@@ -43,6 +44,7 @@ module Stats : sig
     ; finish_reason : string option
     ; native_finish_reason : string option
     ; service_tier : string option
+    ; data_region : string option
     ; latency : int option
     ; moderation_latency : int option
     ; generation_time : int option

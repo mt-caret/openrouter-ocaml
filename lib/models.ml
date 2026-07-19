@@ -7,6 +7,22 @@ let endpoint_url = Uri.of_string "https://openrouter.ai/api/v1/models"
 (* Models API types - exhaustively defined per OpenRouter API spec *)
 module Model_info = struct
   module Pricing = struct
+    module Override = struct
+      type t =
+        { min_prompt_tokens : int
+        ; prompt : String_float.t
+        ; completion : String_float.t
+        ; audio : String_float.t option [@default None]
+        ; input_audio_cache : String_float.t option [@default None]
+        ; input_cache_read : String_float.t option [@default None]
+        ; input_cache_write : String_float.t option [@default None]
+        ; input_cache_write_1h : String_float.t option [@default None]
+        }
+      [@@fields.no_zero_alloc]
+      [@@deriving fields ~getters, jsonaf, sexp]
+      [@@jsonaf.allow_extra_fields]
+    end
+
     type t =
       { prompt : String_float.t
       ; completion : String_float.t
@@ -15,12 +31,15 @@ module Model_info = struct
       ; image_token : String_float.t option [@default None]
       ; image_output : String_float.t option [@default None]
       ; audio : String_float.t option [@default None]
+      ; audio_output : String_float.t option [@default None]
       ; input_audio_cache : String_float.t option [@default None]
       ; web_search : String_float.t option [@default None]
       ; internal_reasoning : String_float.t option [@default None]
       ; input_cache_read : String_float.t option [@default None]
       ; input_cache_write : String_float.t option [@default None]
+      ; input_cache_write_1h : String_float.t option [@default None]
       ; discount : float option [@default None]
+      ; overrides : Override.t list [@default []]
       }
     [@@fields.no_zero_alloc]
     [@@deriving fields ~getters, jsonaf, sexp]
@@ -76,6 +95,49 @@ module Model_info = struct
     [@@deriving fields ~getters, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
   end
 
+  module Benchmarks = struct
+    module Artificial_analysis = struct
+      type t =
+        { intelligence_index : float option [@default None]
+        ; coding_index : float option [@default None]
+        ; agentic_index : float option [@default None]
+        }
+      [@@fields.no_zero_alloc]
+      [@@deriving fields ~getters, jsonaf, sexp]
+      [@@jsonaf.allow_extra_fields]
+    end
+
+    module Design_arena = struct
+      type t =
+        { arena : string
+        ; category : string
+        ; elo : int
+        ; rank : int
+        ; win_rate : float
+        }
+      [@@fields.no_zero_alloc]
+      [@@deriving fields ~getters, jsonaf, sexp]
+      [@@jsonaf.allow_extra_fields]
+    end
+
+    type t =
+      { artificial_analysis : Artificial_analysis.t option [@default None]
+      ; design_arena : Design_arena.t list [@default []]
+      }
+    [@@deriving fields ~getters, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+  end
+
+  module Reasoning = struct
+    type t =
+      { mandatory : bool
+      ; default_enabled : bool option [@default None]
+      ; default_effort : string option [@default None]
+      ; supported_efforts : string list [@default []]
+      ; supports_max_tokens : bool option [@default None]
+      }
+    [@@deriving fields ~getters, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+  end
+
   type t =
     { id : string
     ; canonical_slug : string
@@ -90,15 +152,27 @@ module Model_info = struct
     ; per_request_limits : Per_request_limits.t option [@default None]
     ; supported_parameters : string list [@default []]
     ; default_parameters : Default_parameters.t option [@default None]
+    ; supported_voices : Jsonaf.t option [@default None]
     ; knowledge_cutoff : string option [@default None]
     ; expiration_date : string option [@default None]
     ; links : Links.t option [@default None]
+    ; benchmarks : Benchmarks.t option [@default None]
+    ; reasoning : Reasoning.t option [@default None]
     }
   [@@deriving fields ~getters, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 end
 
 module Response = struct
-  type t = { data : Model_info.t list }
+  module Links = struct
+    type t = { next : string option [@default None] }
+    [@@deriving fields ~getters, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+  end
+
+  type t =
+    { data : Model_info.t list
+    ; total_count : int option [@default None]
+    ; links : Links.t option [@default None]
+    }
   [@@deriving jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 end
 

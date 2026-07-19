@@ -29,10 +29,21 @@ module Response : sig
   end
 
   module Usage : sig
+    module Cost_details : sig
+      type t =
+        { upstream_inference_cost : float option
+        ; upstream_inference_prompt_cost : float option
+        ; upstream_inference_completions_cost : float option
+        }
+      [@@deriving sexp]
+    end
+
     type t =
       { prompt_tokens : int
       ; total_tokens : int
       ; cost : float option
+      ; is_byok : bool option
+      ; cost_details : Cost_details.t option
       }
     [@@deriving sexp]
   end

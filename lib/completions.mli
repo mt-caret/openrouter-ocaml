@@ -182,6 +182,7 @@ module Tool_call : sig
   type t =
     { id : string
     ; type_ : string
+    ; index : int option
     ; function_ : Function_call.t
     }
   [@@deriving sexp]

@@ -23,7 +23,7 @@ let%expect_test "bedrock_null_system_fingerprint" =
          ((role assistant) (content ()) (refusal ()) (reasoning ())
           (reasoning_details ()) (images ()) (annotations ())
           (tool_calls
-           (((id toolu_vrtx_01TRxp7ru5sZbR2D5MzZGpgv) (type_ function)
+           (((id toolu_vrtx_01TRxp7ru5sZbR2D5MzZGpgv) (type_ function) (index ())
              (function_
               ((name classify_post) (arguments "{\"ocaml_related\": true}"))))))
           (tool_call_id ()))))))
@@ -32,6 +32,59 @@ let%expect_test "bedrock_null_system_fingerprint" =
       ((prompt_tokens 18961) (completion_tokens 37) (total_tokens 18998)
        (cost (0.057438)) (is_byok ()) (prompt_tokens_details ())
        (cache_creation ()) (cost_details ()) (completion_tokens_details ())
+       (server_tool_use ()))))
+    |}];
+  Deferred.unit
+;;
+
+(* Anthropic direct, tool call alongside text content and reasoning: the
+   [tool_calls] entries carry an [index] field, and [reasoning_details] carries
+   a signed reasoning block next to the tool call. *)
+let%expect_test "tool_call_with_index" =
+  let%bind () = parse_response_fixture "tool_call_with_index" in
+  [%expect
+    {|
+    ((id gen-1784432956-986Yznj4wUgsZCetXYD7) (provider Anthropic)
+     (model anthropic/claude-sonnet-4.6) (object_ chat.completion)
+     (created 1784432956)
+     (choices
+      (((logprobs ()) (finish_reason tool_calls) (native_finish_reason tool_use)
+        (index 0)
+        (message
+         ((role assistant)
+          (content
+           ("Sure! Let me fetch the current weather in Paris for you right away!"))
+          (refusal ())
+          (reasoning
+           ("The user wants to know the weather in Paris. I'll call the get_weather function."))
+          (reasoning_details
+           (((format (anthropic-claude-v1)) (index (0)) (type_ (reasoning.text))
+             (text
+              ("The user wants to know the weather in Paris. I'll call the get_weather function."))
+             (signature
+              (Er4CCosBCA8YAipADp9BKldVZJO/39Y2zysbe+DJ+yO4EChEzC+o5C6CnU07giNnti2w+SQYxvxURNj6bU3h3Sqjed0T/3z+6KYGsDIRY2xhdWRlLXNvbm5ldC00LTY4AEIIdGhpbmtpbmdaJDRjMGYwNDZmLTI1ZmQtNDVmYi1iZmIzLWEwOGE4ZTI0OWNhNxIMJomEF47tDKZh6AMmGgxzvFjIlVMTZ8+8IfQiMCezHMY3Wi+PuOcmPdjroaub0Nx7HCNHSOsJrcbnpinBCshgjwKduQ4ZS82Z1KtWYSpgNyqJP9W7JJmjriZomCeDfP4tpakTQqExVulqvBSv0Ec8eZN7g008wb4tCcZ+Zpc/ZhIpE1UnYUShVSHLEmA6lgasFAkHy/dbufbNSn5PgBqDYvyG28wf5ZHxaNkbBsCEGAE=))
+             (data ()))))
+          (images ()) (annotations ())
+          (tool_calls
+           (((id toolu_01HQCyhYEUrTQuxR1Q8fnCQ9) (type_ function) (index (0))
+             (function_
+              ((name get_weather) (arguments "{\"location\": \"Paris\"}"))))))
+          (tool_call_id ()))))))
+     (system_fingerprint ()) (service_tier (default))
+     (usage
+      ((prompt_tokens 609) (completion_tokens 96) (total_tokens 705)
+       (cost (0.003267)) (is_byok (false))
+       (prompt_tokens_details
+        (((cached_tokens (0)) (cache_write_tokens (0)) (audio_tokens (0))
+          (video_tokens (0)))))
+       (cache_creation
+        (((ephemeral_5m_input_tokens (0)) (ephemeral_1h_input_tokens (0)))))
+       (cost_details
+        (((upstream_inference_cost (0.003267))
+          (upstream_inference_prompt_cost (0.001827))
+          (upstream_inference_completions_cost (0.00144)))))
+       (completion_tokens_details
+        (((reasoning_tokens (20)) (image_tokens (0)) (audio_tokens (0)))))
        (server_tool_use ()))))
     |}];
   Deferred.unit
