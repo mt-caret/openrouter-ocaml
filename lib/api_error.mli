@@ -21,7 +21,13 @@ module Details : sig
   [@@deriving of_jsonaf, sexp]
 end
 
-type t = { error : Details.t } [@@deriving of_jsonaf, sexp]
+type t =
+  { error : Details.t
+  ; user_id : string option
+      (** The OpenRouter account the request authenticated as. Absent when the
+          request never authenticated (401). *)
+  }
+[@@deriving of_jsonaf, sexp]
 
 (** Try to parse error details from JSON, falling back to raw body if parsing fails. *)
 val of_json_or_body : body_string:string -> Jsonaf.t -> string

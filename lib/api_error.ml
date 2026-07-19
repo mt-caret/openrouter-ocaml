@@ -31,7 +31,14 @@ module Details = struct
   [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 end
 
-type t = { error : Details.t } [@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+(* [user_id] is the OpenRouter account the request authenticated as, echoed
+   alongside [error]. It is absent when the request never authenticated (401),
+   so it stays optional. *)
+type t =
+  { error : Details.t
+  ; user_id : string option [@default None]
+  }
+[@@deriving of_jsonaf, sexp] [@@jsonaf.allow_extra_fields]
 
 let of_json_or_body ~body_string json =
   match Or_error.try_with (fun () -> [%of_jsonaf: t] json) with
