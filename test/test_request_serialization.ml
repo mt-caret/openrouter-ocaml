@@ -240,6 +240,78 @@ let%expect_test "request: tool result message (assistant tool_call → tool repl
     |}]
 ;;
 
+(* A reply's thinking goes back with the tool calls it led to, signature and all, so
+   Anthropic's extended thinking continues after the tool result. *)
+let%expect_test "request: assistant tool_call with reasoning_details" =
+  Request.create
+    ~model:"anthropic/claude-opus-4.5"
+    ~messages:
+      [ Request.Message.user "What time is it?"
+      ; Request.Message.assistant
+          ~tool_calls:
+            [ { id = "toolu_01"
+              ; type_ = "function"
+              ; function_ = { name = "clock"; arguments = "{}" }
+              }
+            ]
+          ~reasoning_details:
+            [ { format = Some "anthropic-claude-v1"
+              ; index = Some 0
+              ; type_ = Some "reasoning.text"
+              ; text = Some "I should check the clock."
+              ; summary = None
+              ; signature = Some "EuMBCkgIDRAB"
+              ; data = None
+              ; id = None
+              }
+            ]
+          ()
+      ; Request.Message.tool ~tool_call_id:"toolu_01" ~content:"12:00"
+      ]
+    ()
+  |> print_non_streaming;
+  [%expect
+    {|
+    {
+      "model": "anthropic/claude-opus-4.5",
+      "messages": [
+        {
+          "role": "user",
+          "content": "What time is it?"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "toolu_01",
+              "type": "function",
+              "function": {
+                "name": "clock",
+                "arguments": "{}"
+              }
+            }
+          ],
+          "reasoning_details": [
+            {
+              "format": "anthropic-claude-v1",
+              "index": 0,
+              "type": "reasoning.text",
+              "text": "I should check the clock.",
+              "signature": "EuMBCkgIDRAB"
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "12:00",
+          "tool_call_id": "toolu_01"
+        }
+      ],
+      "stream": false
+    }
+    |}]
+;;
+
 let%expect_test "request: streaming with web-search plugin" =
   Request.create_streaming
     ~model:"openai/gpt-4o"

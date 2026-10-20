@@ -15,6 +15,14 @@ module Reasoning_detail : sig
     ; id : string option
     }
   [@@deriving sexp]
+
+  (** Merges a stream's [reasoning_details] deltas, in the order they arrived, into
+      whole items, as a non-streaming response would carry them and as an assistant
+      message must send them back. Deltas with the same [index] are one item: its
+      [text], [summary] and [data] are concatenated, and its [format], [type_],
+      [signature] and [id] are the last given. A delta with no [index] is an item of
+      its own. Items keep the order in which they first appeared. *)
+  val accumulate : t list -> t list
 end
 
 module Image : sig
@@ -447,13 +455,26 @@ module Request : sig
       ; content : Content.t option
       ; tool_calls : Tool_call.t list
       ; tool_call_id : string option
+      ; reasoning_details : Reasoning_detail.t list
       }
     [@@deriving jsonaf_of, sexp]
 
     val user : string -> t
     val user_multipart : Content_part.t list -> t
     val system : string -> t
-    val assistant : ?content:string -> ?tool_calls:Tool_call.t list -> unit -> t
+
+    (** [reasoning_details] are the reply's, unmodified and in order (see
+        {!Reasoning_detail.accumulate} for a streamed reply). Sending them back with
+        the tool calls they led to lets the model continue its reasoning after the
+        tool results; Anthropic's extended thinking needs them, signatures included,
+        to keep thinking across tool rounds. *)
+    val assistant
+      :  ?content:string
+      -> ?tool_calls:Tool_call.t list
+      -> ?reasoning_details:Reasoning_detail.t list
+      -> unit
+      -> t
+
     val tool : tool_call_id:string -> content:string -> t
   end
 

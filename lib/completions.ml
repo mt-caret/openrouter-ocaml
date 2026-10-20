@@ -29,6 +29,41 @@ module Reasoning_detail = struct
       (* Upstream reasoning-item id accompanying [reasoning.encrypted] blocks. *)
     }
   [@@deriving equal, jsonaf, sexp] [@@jsonaf.allow_extra_fields]
+
+  let concat a b =
+    match a, b with
+    | None, x | x, None -> x
+    | Some a, Some b -> Some (a ^ b)
+  ;;
+
+  (* The pieces of an item's text arrive in order, and its signature, id and encrypted
+     data each arrive in one delta, often the last. *)
+  let merge { format; index; type_; text; summary; signature; data; id } ~(delta : t) =
+    { format = Option.first_some delta.format format
+    ; index
+    ; type_ = Option.first_some delta.type_ type_
+    ; text = concat text delta.text
+    ; summary = concat summary delta.summary
+    ; signature = Option.first_some delta.signature signature
+    ; data = concat data delta.data
+    ; id = Option.first_some delta.id id
+    }
+  ;;
+
+  let accumulate deltas =
+    List.fold deltas ~init:[] ~f:(fun items delta ->
+      match delta.index with
+      | None -> items @ [ delta ]
+      | Some index ->
+        let same_item item = [%equal: int option] item.index (Some index) in
+        (match List.exists items ~f:same_item with
+         | false -> items @ [ delta ]
+         | true ->
+           List.map items ~f:(fun item ->
+             match same_item item with
+             | true -> merge item ~delta
+             | false -> item)))
+  ;;
 end
 
 (* Image in a message response. [index] is absent on Gemini's image-output
@@ -651,6 +686,8 @@ module Request = struct
             (* Tool calls for assistant role (when replaying conversation) *)
       ; tool_call_id : string option [@default None] [@jsonaf_drop_default.equal]
         (* For tool role: ID of the tool call being responded to *)
+      ; reasoning_details : Reasoning_detail.t list
+            [@default []] [@jsonaf_drop_default.equal]
       }
     [@@deriving jsonaf, sexp]
 
@@ -659,6 +696,7 @@ module Request = struct
       ; content = Some (Content.Text content)
       ; tool_calls = []
       ; tool_call_id = None
+      ; reasoning_details = []
       }
     ;;
 
@@ -667,6 +705,7 @@ module Request = struct
       ; content = Some (Content.Multipart parts)
       ; tool_calls = []
       ; tool_call_id = None
+      ; reasoning_details = []
       }
     ;;
 
@@ -675,14 +714,16 @@ module Request = struct
       ; content = Some (Content.Text content)
       ; tool_calls = []
       ; tool_call_id = None
+      ; reasoning_details = []
       }
     ;;
 
-    let assistant ?content ?(tool_calls = []) () =
+    let assistant ?content ?(tool_calls = []) ?(reasoning_details = []) () =
       { role = "assistant"
       ; content = Option.map content ~f:(fun c -> Content.Text c)
       ; tool_calls
       ; tool_call_id = None
+      ; reasoning_details
       }
     ;;
 
@@ -691,6 +732,7 @@ module Request = struct
       ; content = Some (Content.Text content)
       ; tool_calls = []
       ; tool_call_id = Some tool_call_id
+      ; reasoning_details = []
       }
     ;;
   end

@@ -489,3 +489,63 @@ let%expect_test "stream_audio_output" =
     |}];
   Deferred.unit
 ;;
+
+(* The Anthropic reasoning stream's deltas merged into the single thinking block a
+   non-streaming response would carry: the text pieces joined, the signature from the
+   last delta. *)
+let%expect_test "stream_anthropic_reasoning: accumulated reasoning_details" =
+  let%bind chunks = stream_fixture_chunks "stream_anthropic_reasoning" in
+  List.concat_map chunks ~f:(fun chunk ->
+    List.concat_map chunk.choices ~f:(fun choice -> choice.delta.reasoning_details))
+  |> Completions.Reasoning_detail.accumulate
+  |> [%sexp_of: Completions.Reasoning_detail.t list]
+  |> print_s;
+  [%expect
+    {|
+    (((format (anthropic-claude-v1)) (index (0)) (type_ (reasoning.text))
+      (text ("This is a straightforward arithmetic question. 1 + 1 = 2."))
+      (summary ())
+      (signature
+       (EuMBCkgIDRABGAIqQBT3laJVTnu82MA+qIoM21rKNO7RavUnTB8hV2/jzC/qf/IkHKF+8sYptWVcO7SS3YeNr9R+77/331vMeJ5rnBUSDHmfEcEFvZ4NxlnXrRoMgUMHJQDVQQPGHZqmIjAxL0vdSycvENe6OtAw/BdZwR5+QTHW/cxWItq13SFnf0nu5n+AmDHv6mNx4sYGVsIqSQebHeU9PkpUtmYKYWtcCQZUXoJ7844EVTiVgGzy7G6LB/2a7mvcF/7ivM3oAcVFI9vhF2mFAB2IvVRFFvuoeOFJobt1TAfFZJkYAQ==))
+      (data ()) (id ())))
+    |}];
+  Deferred.unit
+;;
+
+(* Items are told apart by [index] even when their deltas interleave; a delta with no
+   [index] stands alone. *)
+let%expect_test "Reasoning_detail.accumulate: several items" =
+  let detail ?index ?type_ ?text ?summary ?signature ?data ?id () =
+    { Completions.Reasoning_detail.format = Some "openai-responses-v1"
+    ; index
+    ; type_
+    ; text
+    ; summary
+    ; signature
+    ; data
+    ; id
+    }
+  in
+  Completions.Reasoning_detail.accumulate
+    [ detail ~index:0 ~type_:"reasoning.summary" ~summary:"**Plan**" ()
+    ; detail ~index:1 ~type_:"reasoning.encrypted" ~data:"gAAA" ()
+    ; detail ~index:0 ~summary:"\n\nAdd them." ()
+    ; detail ~text:"unindexed" ()
+    ; detail ~index:1 ~data:"BBBB" ~id:"rs_1" ()
+    ]
+  |> [%sexp_of: Completions.Reasoning_detail.t list]
+  |> print_s;
+  [%expect
+    {|
+    (((format (openai-responses-v1)) (index (0)) (type_ (reasoning.summary))
+      (text ()) (summary ( "**Plan**\
+                          \n\
+                          \nAdd them."))
+      (signature ()) (data ()) (id ()))
+     ((format (openai-responses-v1)) (index (1)) (type_ (reasoning.encrypted))
+      (text ()) (summary ()) (signature ()) (data (gAAABBBB)) (id (rs_1)))
+     ((format (openai-responses-v1)) (index ()) (type_ ()) (text (unindexed))
+      (summary ()) (signature ()) (data ()) (id ())))
+    |}];
+  Deferred.unit
+;;
