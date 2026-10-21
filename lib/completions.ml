@@ -791,6 +791,18 @@ module Request = struct
     include Json_helper.Make_string_variant (T)
   end
 
+  module Speed = struct
+    module T = struct
+      type t =
+        | Standard
+        | Fast
+      [@@deriving sexp, enumerate]
+    end
+
+    include T
+    include Json_helper.Make_string_variant (T)
+  end
+
   module Stream_options = struct
     type t = { include_usage : bool option [@jsonaf.option] } [@@deriving jsonaf, sexp]
 
@@ -1015,6 +1027,7 @@ module Request = struct
     ; logprobs : bool option [@jsonaf.option]
     ; top_logprobs : int option [@jsonaf.option]
     ; verbosity : Verbosity.t option [@jsonaf.option]
+    ; speed : Speed.t option [@jsonaf.option]
     ; response_format : Response_format.t option [@jsonaf.option]
     ; structured_outputs : bool option [@jsonaf.option]
     ; modalities : string list option [@jsonaf.option]
@@ -1066,6 +1079,7 @@ module Request = struct
         ?logprobs
         ?top_logprobs
         ?verbosity
+        ?speed
         ?response_format
         ?structured_outputs
         ?modalities
@@ -1112,6 +1126,7 @@ module Request = struct
     ; logprobs
     ; top_logprobs
     ; verbosity
+    ; speed
     ; response_format
     ; structured_outputs
     ; modalities
@@ -1153,6 +1168,7 @@ module Request = struct
         ?logprobs
         ?top_logprobs
         ?verbosity
+        ?speed
         ?response_format
         ?structured_outputs
         ?modalities
@@ -1195,6 +1211,7 @@ module Request = struct
       ?logprobs
       ?top_logprobs
       ?verbosity
+      ?speed
       ?response_format
       ?structured_outputs
       ?modalities
@@ -1239,6 +1256,7 @@ module Request = struct
         ?logprobs
         ?top_logprobs
         ?verbosity
+        ?speed
         ?response_format
         ?structured_outputs
         ?modalities
@@ -1282,6 +1300,7 @@ module Request = struct
       ?logprobs
       ?top_logprobs
       ?verbosity
+      ?speed
       ?response_format
       ?structured_outputs
       ?modalities

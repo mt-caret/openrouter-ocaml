@@ -641,6 +641,7 @@ module Request_options = struct
     ; logprobs : bool
     ; top_logprobs : int option
     ; verbosity : Completions.Request.Verbosity.t option
+    ; speed : Completions.Request.Speed.t option
     ; parallel_tool_calls : bool option
     ; modalities : string list
     ; structured_outputs : bool
@@ -688,6 +689,11 @@ module Request_options = struct
         "verbosity"
         (optional Completions.Request.Verbosity.arg_type)
         ~doc:"LEVEL completion verbosity (low|medium|high|xhigh|max)"
+    and speed =
+      flag
+        "speed"
+        (optional Completions.Request.Speed.arg_type)
+        ~doc:"SPEED output speed (standard|fast)"
     and parallel_tool_calls =
       flag "parallel-tool-calls" (optional bool) ~doc:"BOOL allow parallel tool calls"
     and modalities =
@@ -759,6 +765,7 @@ module Request_options = struct
     ; logprobs
     ; top_logprobs
     ; verbosity
+    ; speed
     ; parallel_tool_calls
     ; modalities
     ; structured_outputs
@@ -951,6 +958,7 @@ module Common = struct
             ; logprobs
             ; top_logprobs
             ; verbosity
+            ; speed
             ; parallel_tool_calls
             ; modalities
             ; structured_outputs
@@ -1007,6 +1015,7 @@ module Common = struct
         ?logprobs:(Option.some_if logprobs true)
         ?top_logprobs
         ?verbosity
+        ?speed
         ?response_format
         ?structured_outputs:(Option.some_if structured_outputs true)
         ?modalities:(optional_list modalities)

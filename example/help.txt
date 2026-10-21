@@ -165,6 +165,7 @@ OpenRouter API example client
                                (model decides when to call)
   . [-service-tier TIER]     . service tier (e.g. auto, default, flex, priority)
   . [-session-id ID]         . observability session id
+  . [-speed SPEED]           . output speed (standard|fast)
   . [-stop STR] ...          . stop sequence (may be repeated, up to 4)
   . [-stream-usage]          . include final usage chunk in streaming responses
   . [-structured-outputs]    . set structured_outputs=true (strict-mode flag

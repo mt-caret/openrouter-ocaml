@@ -536,6 +536,19 @@ module Request : sig
     val arg_type : t Command.Arg_type.t
   end
 
+  (** Anthropic's fast mode: [Fast] asks for faster output at a higher price. OpenRouter
+      treats [speed: "fast"] like [service_tier: "fast"]. *)
+  module Speed : sig
+    type t =
+      | Standard
+      | Fast
+    [@@deriving jsonaf, sexp]
+
+    include Stringable.S with type t := t
+
+    val arg_type : t Command.Arg_type.t
+  end
+
   module Stream_options : sig
     type t = { include_usage : bool option } [@@deriving jsonaf, sexp]
 
@@ -716,6 +729,7 @@ module Request : sig
     -> ?logprobs:bool
     -> ?top_logprobs:int
     -> ?verbosity:Verbosity.t
+    -> ?speed:Speed.t
     -> ?response_format:Response_format.t
     -> ?structured_outputs:bool
     -> ?modalities:string list

@@ -35,6 +35,29 @@ let%expect_test "request: minimal" =
     |}]
 ;;
 
+let%expect_test "request: fast mode" =
+  Request.create
+    ~model:"anthropic/claude-opus-5.5"
+    ~messages:[ Request.Message.user "Hello, world!" ]
+    ~speed:Fast
+    ()
+  |> print_non_streaming;
+  [%expect
+    {|
+    {
+      "model": "anthropic/claude-opus-5.5",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Hello, world!"
+        }
+      ],
+      "stream": false,
+      "speed": "fast"
+    }
+    |}]
+;;
+
 let%expect_test "request: with function tool + tool_choice = auto" =
   let search_tool =
     Tool.function_
